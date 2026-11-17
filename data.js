@@ -3,7 +3,7 @@
 const CALLS = {
   g1: {
     id: "g1", source: "Gong", title: "Discovery call", date: "12 Nov 2026", length: "48 min", consent: true,
-    people: ["Priya Raman (Harrow & Vale, Head of Innovation)", "James Okafor (Harrow & Vale, Partner, Banking and Finance)", "Sofia Lindqvist (Legora, Account Executive)", "Tom Achebe (Legora, Legal Engineer)"],
+    people: ["Priya Raman (Harrow & Vale, Head of Innovation)", "James Okafor (Harrow & Vale, Partner, Banking and Finance)", "Sofia Lindqvist (ABC Inc., Account Executive)", "Tom Achebe (ABC Inc., Legal Engineer)"],
     lines: [
       { t: "02:10", who: "Sofia Lindqvist", text: "Thanks for making time. Where would you most like the pilot to start?" },
       { t: "03:05", who: "Priya Raman", text: "Our banking team spends a lot of junior time reviewing facility agreements against our standard positions." },
@@ -21,7 +21,7 @@ const CALLS = {
   },
   gr1: {
     id: "gr1", source: "Granola", title: "Technical and security call", date: "14 Nov 2026", length: "35 min", consent: true,
-    people: ["Wei Ling Ho (Harrow & Vale, IT Director, Singapore)", "Priya Raman (Harrow & Vale)", "Mei Tan (Legora, Legal Engineer)", "Tom Achebe (Legora, Legal Engineer)"],
+    people: ["Wei Ling Ho (Harrow & Vale, IT Director, Singapore)", "Priya Raman (Harrow & Vale)", "Mei Tan (ABC Inc., Legal Engineer)", "Tom Achebe (ABC Inc., Legal Engineer)"],
     lines: [
       { t: "01:30", who: "Wei Ling Ho", text: "Everything in the pilot has to run on dummy data, no client documents." },
       { t: "04:15", who: "Wei Ling Ho", text: "Singapore users work mostly in English, but some contracts are bilingual English and Chinese." },
@@ -34,7 +34,7 @@ const CALLS = {
   },
   g2: {
     id: "g2", source: "Gong", title: "Follow-up call", date: "18 Nov 2026", length: "22 min", consent: true,
-    people: ["Priya Raman (Harrow & Vale)", "James Okafor (Harrow & Vale)", "Sofia Lindqvist (Legora)"],
+    people: ["Priya Raman (Harrow & Vale)", "James Okafor (Harrow & Vale)", "Sofia Lindqvist (ABC Inc.)"],
     lines: [
       { t: "01:45", who: "Priya Raman", text: "Employment have now said they want to test drafting responses to employee grievances." },
       { t: "04:20", who: "James Okafor", text: "For banking, success is cutting first-pass review from a day to half a day per agreement, on at least twenty agreements." },
@@ -45,14 +45,14 @@ const CALLS = {
   // Brightwater (AC8): one call without AI-processing consent
   gb1: {
     id: "gb1", source: "Gong", title: "Discovery call", date: "10 Nov 2026", length: "40 min", consent: false,
-    people: ["Brightwater Legal partners", "Chloe Nguyen (Legora, Account Executive)"],
+    people: ["Brightwater Legal partners", "Chloe Nguyen (ABC Inc., Account Executive)"],
     lines: [
       { t: "05:00", who: "Firm partner", text: "We want to try drafting advice notes for the insurance team." }
     ]
   },
   grb1: {
     id: "grb1", source: "Granola", title: "Scoping call", date: "13 Nov 2026", length: "30 min", consent: true,
-    people: ["Brightwater Legal innovation lead", "Mei Tan (Legora, Legal Engineer)"],
+    people: ["Brightwater Legal innovation lead", "Mei Tan (ABC Inc., Legal Engineer)"],
     lines: [
       { t: "03:10", who: "Innovation lead", text: "The construction team wants to review subcontracts for liquidated damages and time bars." },
       { t: "06:40", who: "Innovation lead", text: "Success would be every time bar flagged in a sample of thirty subcontracts." }

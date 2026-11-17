@@ -372,7 +372,7 @@ function useCasesTab(p, r) {
   return `<p class="muted small">AI output stays a draft until a Legal Engineer approves. Hover ❝ to see the sentence each item came from.</p>
   <div class="card flush"><table class="grid uc"><thead><tr><th>Use case</th><th>Practice area</th><th>Success criterion</th><th>Past pilot match</th><th>Status</th></tr></thead><tbody>
   ${r.useCases.map(u => `<tr class="${u.status}">
-    <td><div class="uct">${esc(u.title)} ${srcLink(u.cite, "icon")}</div><div class="small muted">Legora feature: ${esc(u.feature)} ${u.change === "new" ? `<span class="chip blue">New</span>` : u.change === "changed" ? `<span class="chip blue">Changed</span>` : u.change === "kept" ? `<span class="chip">Your edits kept</span>` : ""}</div></td>
+    <td><div class="uct">${esc(u.title)} ${srcLink(u.cite, "icon")}</div><div class="small muted">Product feature: ${esc(u.feature)} ${u.change === "new" ? `<span class="chip blue">New</span>` : u.change === "changed" ? `<span class="chip blue">Changed</span>` : u.change === "kept" ? `<span class="chip">Your edits kept</span>` : ""}</div></td>
     <td>${esc(u.practice)}</td>
     <td>${editable ? `<textarea rows="2" placeholder="No criterion in the calls. Add one or ask the firm." onchange="A.editCrit('${u.id}',this)">${esc(u.criterion ? u.criterion.text : "")}</textarea>` : `<div>${u.criterion && u.criterion.text ? esc(u.criterion.text) : `<span class="badc">Not in the calls</span>`}</div>`}
       <div class="small muted">${u.criterion && u.criterion.cite ? srcLink(u.criterion.cite) : ""} ${u.edited ? "Edited by you" : ""} ${u.change === "changed" ? `Was: ${esc(u.was)}` : ""}</div></td>
@@ -410,8 +410,8 @@ function scheduleTab(p, r) {
   const sel = S.selectedSlot[p.id] ?? 0; const s = r.slots[sel];
   const people = [...cal.internal, ...cal.firm];
   const fmt = sl => `${sl.day} ${sl.date}`;
-  const invite = `To: Priya Raman, Wei Ling Ho (Harrow & Vale); Tom Achebe, Mei Tan (Legora)
-Subject: Legora pilot: first training session for banking associates
+  const invite = `To: Priya Raman, Wei Ling Ho (Harrow & Vale); Tom Achebe, Mei Tan (ABC Inc.)
+Subject: ABC Inc. pilot: first training session for banking associates
 When: ${fmt(s)}, ${s.local.find(x => x.city === "London").time} London / ${s.local.find(x => x.city === "Singapore").time} Singapore (60 min)
 
 Hi Priya and Wei Ling,
@@ -422,7 +422,7 @@ Does this time work for you? Happy to move it.
 
 Sofia`;
   return `<div class="card"><div class="row between"><b>${esc(cal.session)}</b>${srcLink(cal.sessionCite)}</div>
-    <p class="small muted">Pia read free/busy for the Legora team from Google Calendar. Firm calendars are not read; only their working hours (08:00 to 18:00 local).</p>
+    <p class="small muted">Pia read free/busy for the ABC Inc. team from Google Calendar. Firm calendars are not read; only their working hours (08:00 to 18:00 local).</p>
     <table class="grid slots"><thead><tr><th></th><th>Slot</th>${people.map(x => `<th>${esc(x.name.split(" ")[0])}<div class="small muted">${x.city}</div></th>`).join("")}</tr></thead><tbody>
     ${r.slots.map((sl, i) => `<tr class="${i === sel ? "sel" : ""}" onclick="A.slot(${i})"><td><input type="radio" ${i === sel ? "checked" : ""}></td><td><b>${fmt(sl)}</b></td>${sl.local.map(x => `<td>${x.time}</td>`).join("")}</tr>`).join("")}
     </tbody></table></div>

@@ -148,7 +148,7 @@ function runPia(pilot, opts = {}) {
   let slots = [];
   if (pilot.calendar) {
     slots = proposeSlots(pilot.calendar);
-    add("ai", "Propose meeting slots", `${slots.length} slots that fit London, Stockholm and Singapore working hours and Legora free/busy. Invite drafted, not sent.`, "ok", "Google Calendar");
+    add("ai", "Propose meeting slots", `${slots.length} slots that fit London, Stockholm and Singapore working hours and ABC Inc. free/busy. Invite drafted, not sent.`, "ok", "Google Calendar");
   }
   add("person", "Waiting for approval", `${pilot.les[0]} reviews, edits and approves. Nothing is written before that.`, "wait");
 

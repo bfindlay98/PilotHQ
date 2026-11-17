@@ -108,7 +108,7 @@ details summary{cursor:pointer}
 const CALLS = {
   g1: {
     id: "g1", source: "Gong", title: "Discovery call", date: "12 Nov 2026", length: "48 min", consent: true,
-    people: ["Priya Raman (Harrow & Vale, Head of Innovation)", "James Okafor (Harrow & Vale, Partner, Banking and Finance)", "Sofia Lindqvist (Legora, Account Executive)", "Tom Achebe (Legora, Legal Engineer)"],
+    people: ["Priya Raman (Harrow & Vale, Head of Innovation)", "James Okafor (Harrow & Vale, Partner, Banking and Finance)", "Sofia Lindqvist (ABC Inc., Account Executive)", "Tom Achebe (ABC Inc., Legal Engineer)"],
     lines: [
       { t: "02:10", who: "Sofia Lindqvist", text: "Thanks for making time. Where would you most like the pilot to start?" },
       { t: "03:05", who: "Priya Raman", text: "Our banking team spends a lot of junior time reviewing facility agreements against our standard positions." },
@@ -126,7 +126,7 @@ const CALLS = {
   },
   gr1: {
     id: "gr1", source: "Granola", title: "Technical and security call", date: "14 Nov 2026", length: "35 min", consent: true,
-    people: ["Wei Ling Ho (Harrow & Vale, IT Director, Singapore)", "Priya Raman (Harrow & Vale)", "Mei Tan (Legora, Legal Engineer)", "Tom Achebe (Legora, Legal Engineer)"],
+    people: ["Wei Ling Ho (Harrow & Vale, IT Director, Singapore)", "Priya Raman (Harrow & Vale)", "Mei Tan (ABC Inc., Legal Engineer)", "Tom Achebe (ABC Inc., Legal Engineer)"],
     lines: [
       { t: "01:30", who: "Wei Ling Ho", text: "Everything in the pilot has to run on dummy data, no client documents." },
       { t: "04:15", who: "Wei Ling Ho", text: "Singapore users work mostly in English, but some contracts are bilingual English and Chinese." },
@@ -139,7 +139,7 @@ const CALLS = {
   },
   g2: {
     id: "g2", source: "Gong", title: "Follow-up call", date: "18 Nov 2026", length: "22 min", consent: true,
-    people: ["Priya Raman (Harrow & Vale)", "James Okafor (Harrow & Vale)", "Sofia Lindqvist (Legora)"],
+    people: ["Priya Raman (Harrow & Vale)", "James Okafor (Harrow & Vale)", "Sofia Lindqvist (ABC Inc.)"],
     lines: [
       { t: "01:45", who: "Priya Raman", text: "Employment have now said they want to test drafting responses to employee grievances." },
       { t: "04:20", who: "James Okafor", text: "For banking, success is cutting first-pass review from a day to half a day per agreement, on at least twenty agreements." },
@@ -150,14 +150,14 @@ const CALLS = {
   // Brightwater (AC8): one call without AI-processing consent
   gb1: {
     id: "gb1", source: "Gong", title: "Discovery call", date: "10 Nov 2026", length: "40 min", consent: false,
-    people: ["Brightwater Legal partners", "Chloe Nguyen (Legora, Account Executive)"],
+    people: ["Brightwater Legal partners", "Chloe Nguyen (ABC Inc., Account Executive)"],
     lines: [
       { t: "05:00", who: "Firm partner", text: "We want to try drafting advice notes for the insurance team." }
     ]
   },
   grb1: {
     id: "grb1", source: "Granola", title: "Scoping call", date: "13 Nov 2026", length: "30 min", consent: true,
-    people: ["Brightwater Legal innovation lead", "Mei Tan (Legora, Legal Engineer)"],
+    people: ["Brightwater Legal innovation lead", "Mei Tan (ABC Inc., Legal Engineer)"],
     lines: [
       { t: "03:10", who: "Innovation lead", text: "The construction team wants to review subcontracts for liquidated damages and time bars." },
       { t: "06:40", who: "Innovation lead", text: "Success would be every time bar flagged in a sample of thirty subcontracts." }
@@ -437,7 +437,7 @@ function runPia(pilot, opts = {}) {
   let slots = [];
   if (pilot.calendar) {
     slots = proposeSlots(pilot.calendar);
-    add("ai", "Propose meeting slots", `${slots.length} slots that fit London, Stockholm and Singapore working hours and Legora free/busy. Invite drafted, not sent.`, "ok", "Google Calendar");
+    add("ai", "Propose meeting slots", `${slots.length} slots that fit London, Stockholm and Singapore working hours and ABC Inc. free/busy. Invite drafted, not sent.`, "ok", "Google Calendar");
   }
   add("person", "Waiting for approval", `${pilot.les[0]} reviews, edits and approves. Nothing is written before that.`, "wait");
 
@@ -862,7 +862,7 @@ function useCasesTab(p, r) {
   return `<p class="muted small">AI output stays a draft until a Legal Engineer approves. Hover ❝ to see the sentence each item came from.</p>
   <div class="card flush"><table class="grid uc"><thead><tr><th>Use case</th><th>Practice area</th><th>Success criterion</th><th>Past pilot match</th><th>Status</th></tr></thead><tbody>
   ${r.useCases.map(u => `<tr class="${u.status}">
-    <td><div class="uct">${esc(u.title)} ${srcLink(u.cite, "icon")}</div><div class="small muted">Legora feature: ${esc(u.feature)} ${u.change === "new" ? `<span class="chip blue">New</span>` : u.change === "changed" ? `<span class="chip blue">Changed</span>` : u.change === "kept" ? `<span class="chip">Your edits kept</span>` : ""}</div></td>
+    <td><div class="uct">${esc(u.title)} ${srcLink(u.cite, "icon")}</div><div class="small muted">Product feature: ${esc(u.feature)} ${u.change === "new" ? `<span class="chip blue">New</span>` : u.change === "changed" ? `<span class="chip blue">Changed</span>` : u.change === "kept" ? `<span class="chip">Your edits kept</span>` : ""}</div></td>
     <td>${esc(u.practice)}</td>
     <td>${editable ? `<textarea rows="2" placeholder="No criterion in the calls. Add one or ask the firm." onchange="A.editCrit('${u.id}',this)">${esc(u.criterion ? u.criterion.text : "")}</textarea>` : `<div>${u.criterion && u.criterion.text ? esc(u.criterion.text) : `<span class="badc">Not in the calls</span>`}</div>`}
       <div class="small muted">${u.criterion && u.criterion.cite ? srcLink(u.criterion.cite) : ""} ${u.edited ? "Edited by you" : ""} ${u.change === "changed" ? `Was: ${esc(u.was)}` : ""}</div></td>
@@ -900,8 +900,8 @@ function scheduleTab(p, r) {
   const sel = S.selectedSlot[p.id] ?? 0; const s = r.slots[sel];
   const people = [...cal.internal, ...cal.firm];
   const fmt = sl => `${sl.day} ${sl.date}`;
-  const invite = `To: Priya Raman, Wei Ling Ho (Harrow & Vale); Tom Achebe, Mei Tan (Legora)
-Subject: Legora pilot: first training session for banking associates
+  const invite = `To: Priya Raman, Wei Ling Ho (Harrow & Vale); Tom Achebe, Mei Tan (ABC Inc.)
+Subject: ABC Inc. pilot: first training session for banking associates
 When: ${fmt(s)}, ${s.local.find(x => x.city === "London").time} London / ${s.local.find(x => x.city === "Singapore").time} Singapore (60 min)
 
 Hi Priya and Wei Ling,
@@ -912,7 +912,7 @@ Does this time work for you? Happy to move it.
 
 Sofia`;
   return `<div class="card"><div class="row between"><b>${esc(cal.session)}</b>${srcLink(cal.sessionCite)}</div>
-    <p class="small muted">Pia read free/busy for the Legora team from Google Calendar. Firm calendars are not read; only their working hours (08:00 to 18:00 local).</p>
+    <p class="small muted">Pia read free/busy for the ABC Inc. team from Google Calendar. Firm calendars are not read; only their working hours (08:00 to 18:00 local).</p>
     <table class="grid slots"><thead><tr><th></th><th>Slot</th>${people.map(x => `<th>${esc(x.name.split(" ")[0])}<div class="small muted">${x.city}</div></th>`).join("")}</tr></thead><tbody>
     ${r.slots.map((sl, i) => `<tr class="${i === sel ? "sel" : ""}" onclick="A.slot(${i})"><td><input type="radio" ${i === sel ? "checked" : ""}></td><td><b>${fmt(sl)}</b></td>${sl.local.map(x => `<td>${x.time}</td>`).join("")}</tr>`).join("")}
     </tbody></table></div>
