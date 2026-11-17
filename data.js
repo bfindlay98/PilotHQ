@@ -166,7 +166,7 @@ const PILOTS = [
 const ROLES = {
   le: { name: "Tom Achebe", title: "Legal Engineer, London", label: "Legal Engineer" },
   ae: { name: "Sofia Lindqvist", title: "Account Executive, Stockholm", label: "Account Executive" },
-  growth: { name: "Dana Whitfield", title: "Head of Growth, EMEA", label: "Growth leadership" },
+  esm: { name: "Dana Whitfield", title: "Enterprise Sales Manager, EMEA", label: "Enterprise Sales Manager" },
   aie: { name: "Jo Reyes", title: "AI Enablement", label: "AI Enablement" },
   out: { name: "Lars Berg", title: "Legal Engineer, Nordics", label: "Outside the deal team" }
 };
@@ -180,3 +180,96 @@ const TEST_SET = [
   ["T17", "Nordics, Employment", 3, 2, 0], ["T18", "Germany, Corporate", 5, 5, 0], ["T19", "Australia, Insurance", 4, 3, 0], ["T20", "UK, Funds", 4, 4, 0],
   ["T21", "US, Banking", 5, 4, 0], ["T22", "APAC, Real Estate", 3, 3, 0], ["T23", "UK, Restructuring", 4, 3, 0], ["T24 (injection)", "UK, Disputes, prompt injection in transcript", 4, 4, 0]
 ];
+
+// ---------- People, firms, tasks, capacity, digests (all fictional) ----------
+const PEOPLE = [
+  { name: "Tom Achebe", title: "Legal Engineer", org: "ABC Inc.", city: "London", off: 0, specialities: ["Banking and Finance", "Real Estate"], languages: ["English"], booked: 28, hours: 35, color: "#3E6B5A" },
+  { name: "Mei Tan", title: "Legal Engineer", org: "ABC Inc.", city: "Singapore", off: 8, specialities: ["Disputes", "Construction"], languages: ["English", "Mandarin"], booked: 33, hours: 35, color: "#7A5C3E" },
+  { name: "Lars Berg", title: "Legal Engineer", org: "ABC Inc.", city: "Oslo", off: 1, specialities: ["Disputes", "Employment"], languages: ["Norwegian", "English"], booked: 20, hours: 35, color: "#4A5D7E" },
+  { name: "Anna Kruger", title: "Legal Engineer", org: "ABC Inc.", city: "Berlin", off: 1, specialities: ["Corporate", "Funds"], languages: ["German", "English"], booked: 30, hours: 35, color: "#6E4A6B" },
+  { name: "Ravi Menon", title: "Legal Engineer", org: "ABC Inc.", city: "New York", off: -5, specialities: ["Litigation", "IP"], languages: ["English", "Hindi"], booked: 14, hours: 35, color: "#5B6B3A" },
+  { name: "Sofia Lindqvist", title: "Account Executive", org: "ABC Inc.", city: "Stockholm", off: 1, specialities: ["UK and Nordic law firms"], languages: ["Swedish", "English"], color: "#8A4B3C" },
+  { name: "Chloe Nguyen", title: "Account Executive", org: "ABC Inc.", city: "Sydney", off: 11, specialities: ["Australian law firms"], languages: ["English", "Vietnamese"], color: "#3C6E8A" },
+  { name: "Jonas Weber", title: "Account Executive", org: "ABC Inc.", city: "Munich", off: 1, specialities: ["DACH law firms"], languages: ["German", "English"], color: "#5E5E8A" },
+  { name: "Marcus Hill", title: "Account Executive", org: "ABC Inc.", city: "New York", off: -5, specialities: ["US East law firms"], languages: ["English"], color: "#8A6E3C" },
+  { name: "Dana Whitfield", title: "Enterprise Sales Manager, EMEA", org: "ABC Inc.", city: "London", off: 0, specialities: ["Enterprise sales", "Pilot portfolio"], languages: ["English", "French"], color: "#2F4F4F" },
+  { name: "Jo Reyes", title: "AI Enablement", org: "ABC Inc.", city: "London", off: 0, specialities: ["Agent quality", "Test sets"], languages: ["English", "Spanish"], color: "#6B4FD8" },
+  { name: "Priya Raman", title: "Head of Innovation", org: "hv", city: "London", off: 0, specialities: ["Cares about: a decision by end of January", "Partner buy-in"], languages: ["English"], color: "#9A6A2F" },
+  { name: "James Okafor", title: "Partner, Banking and Finance", org: "hv", city: "London", off: 0, specialities: ["Cares about: cutting first-pass review time", "Refinancings"], languages: ["English"], color: "#5A4A7A" },
+  { name: "Wei Ling Ho", title: "IT Director", org: "hv", city: "Singapore", off: 8, specialities: ["Cares about: dummy data only, no client documents", "Bilingual contracts"], languages: ["English", "Mandarin"], color: "#2F6A6A" }
+];
+
+const FIRMS = {
+  hv: { about: "Full-service UK firm with a strong finance and disputes practice.", hq: "London", offices: ["London", "Singapore"], lawyers: 420, practices: ["Banking and Finance", "Disputes", "Corporate", "Real Estate", "Employment"] },
+  nh: { about: "Norwegian business law firm.", hq: "Oslo", offices: ["Oslo", "Bergen"], lawyers: 160, practices: ["Disputes", "Energy", "Corporate"] },
+  bw: { about: "Australian firm focused on construction and insurance.", hq: "Sydney", offices: ["Sydney", "Melbourne", "Brisbane"], lawyers: 210, practices: ["Construction", "Insurance", "Property"] },
+  lh: { about: "German corporate and funds firm.", hq: "Frankfurt", offices: ["Frankfurt", "Munich", "Hamburg"], lawyers: 300, practices: ["Corporate", "Funds", "Tax"] },
+  cr: { about: "US East Coast litigation boutique.", hq: "New York", offices: ["New York", "Boston"], lawyers: 260, practices: ["Litigation", "IP", "Employment"] }
+};
+
+const LIB_EXTRA = {
+  "L-014": { practice: "Banking and Finance", outcome: "Firm bought firmwide. Grid reused in 3 later pilots." },
+  "L-021": { practice: "Disputes", outcome: "Firm bought for the disputes group. First drafts in one day." },
+  "L-009": { practice: "Real Estate", outcome: "Firm bought. 94% of break clauses caught on the sample." },
+  "L-017": { practice: "Corporate", outcome: "Extended pilot, then bought." },
+  "L-025": { practice: "Employment", outcome: "Firm bought for HR advisory team." },
+  "L-030": { practice: "Construction", outcome: "Firm bought. Template now standard for construction pilots." }
+};
+
+const STAGES = ["Discovery calls", "Plan drafted", "Plan approved", "Kickoff", "First training", "Live usage", "Readout", "Decision"];
+const PROGRESS = {
+  hv: { dates: ["12 Nov", "18 Nov", "18 Nov", "25 Nov", "30 Nov", "Dec to Jan", "22 Jan", "31 Jan"], owners: ["Sofia Lindqvist", "Tom Achebe", "Tom Achebe", "Sofia Lindqvist", "Mei Tan", "Sofia Lindqvist", "Sofia Lindqvist", "Priya Raman"], decision: "31 Jan 2027", readout: "22 Jan 2027", daysLeft: 60 },
+  nh: { current: 0, blocked: true, dates: ["Not booked", "", "", "", "", "", "", "15 Feb"], owners: ["Sofia Lindqvist", "Lars Berg", "Lars Berg", "Sofia Lindqvist", "Lars Berg", "Sofia Lindqvist", "Sofia Lindqvist", "Firm"], decision: "15 Feb 2027", readout: "5 Feb 2027", daysLeft: 30 },
+  bw: { current: 1, dates: ["13 Nov", "17 Nov", "", "", "", "", "", "28 Feb"], owners: ["Chloe Nguyen", "Mei Tan", "Mei Tan", "Chloe Nguyen", "Mei Tan", "Chloe Nguyen", "Chloe Nguyen", "Firm"], decision: "28 Feb 2027", readout: "10 Feb 2027", daysLeft: 60 },
+  lh: { current: 5, dates: ["2 Oct", "9 Oct", "13 Oct", "20 Oct", "27 Oct", "Now", "14 Jan", "31 Jan"], owners: ["Jonas Weber", "Anna Kruger", "Anna Kruger", "Jonas Weber", "Anna Kruger", "Jonas Weber", "Jonas Weber", "Firm"], decision: "31 Jan 2027", readout: "14 Jan 2027", daysLeft: 67,
+    criteria: [["Fund document review in half the time", "On track"], ["80% of associates active weekly", "On track"], ["Tax memo first drafts rated 4 of 5", "At risk"], ["Zero client data used", "Met"]] },
+  cr: { current: 4, dates: ["20 Oct", "28 Oct", "4 Nov", "9 Nov", "Overdue", "", "8 Jan", "20 Jan"], owners: ["Marcus Hill", "Tom Achebe", "Tom Achebe", "Marcus Hill", "Tom Achebe", "Marcus Hill", "Marcus Hill", "Firm"], decision: "20 Jan 2027", readout: "8 Jan 2027", daysLeft: 51, blocked: true,
+    criteria: [["Deposition summaries in 2 hours", "On track"], ["Privilege review accuracy above 95%", "Not started"], ["Not agreed: IP team measure", "Not started"], ["Not agreed: employment team measure", "Not started"], ["Not agreed: partner rating", "Not started"]] }
+};
+
+// dueDay: days after Wed 18 Nov 2026 (0 = today)
+const TASKS = [
+  { id: "t1", pid: "hv", stage: 1, after: "run", title: "Review and approve Pia's draft plan", owner: "Tom Achebe", due: "Today", dueDay: 0, tab: "usecases" },
+  { id: "t2", pid: "hv", stage: 1, after: "run", title: "Check the dummy data has no deal facts", owner: "Tom Achebe", due: "Today", dueDay: 0, tab: "dummy" },
+  { id: "t3", pid: "hv", stage: 1, after: "run", title: "Chase open questions with Priya Raman", owner: "Sofia Lindqvist", due: "Fri 20 Nov", dueDay: 2, tab: "gaps" },
+  { id: "t4", pid: "hv", stage: 3, after: "approve", title: "Send the first training invite", owner: "Sofia Lindqvist", due: "Thu 19 Nov", dueDay: 1, tab: "schedule" },
+  { id: "t5", pid: "hv", stage: 3, after: "approve", title: "Draft the kickoff agenda", owner: "Sofia Lindqvist", due: "Mon 23 Nov", dueDay: 5, pia: "Ask Pia to draft the kickoff agenda" },
+  { id: "t6", pid: "hv", stage: 3, after: "approve", title: "Confirm success criteria with Priya Raman", owner: "Sofia Lindqvist", due: "Tue 24 Nov", dueDay: 6 },
+  { id: "t7", pid: "hv", stage: 3, after: "approve", title: "Set up the review workspace with the dummy agreements", owner: "Mei Tan", due: "Tue 24 Nov", dueDay: 6 },
+  { id: "t8", pid: "cr", stage: 4, title: "Run the overdue first training for the litigation team", owner: "Tom Achebe", due: "Fri 20 Nov", dueDay: 2 },
+  { id: "t9", pid: "cr", stage: 4, title: "Agree the 3 missing success criteria", owner: "Marcus Hill", due: "Thu 19 Nov", dueDay: 1 },
+  { id: "t10", pid: "cr", stage: 4, title: "Approve extra Legal Engineer hours", owner: "Dana Whitfield", due: "Today", dueDay: 0, route: "approvals" },
+  { id: "t11", pid: "lh", stage: 5, title: "Week 4 usage review with the firm", owner: "Jonas Weber", due: "Thu 26 Nov", dueDay: 8 },
+  { id: "t12", pid: "lh", stage: 5, title: "Follow up the tax memo rating", owner: "Anna Kruger", due: "Mon 23 Nov", dueDay: 5 },
+  { id: "t13", pid: "nh", stage: 0, title: "Book and record a discovery call", owner: "Sofia Lindqvist", due: "Fri 20 Nov", dueDay: 2 },
+  { id: "t14", pid: "nh", stage: 0, title: "Prepare discovery questions for the disputes team", owner: "Lars Berg", due: "Thu 19 Nov", dueDay: 1 },
+  { id: "t15", pid: "bw", stage: 1, title: "Ask the firm to agree to AI processing for the 10 Nov call", owner: "Chloe Nguyen", due: "Thu 19 Nov", dueDay: 1 },
+  { id: "t16", pid: "bw", stage: 1, title: "Review and approve Pia's draft plan", owner: "Mei Tan", due: "Today", dueDay: 0, tab: "usecases" },
+  { id: "t17", pid: null, stage: 0, title: "Review pilot priorities for December", owner: "Dana Whitfield", due: "Fri 27 Nov", dueDay: 9, route: "pilots" }
+];
+
+const WORKSTREAMS = {
+  hv: [["Pilot coordination", "Sofia Lindqvist"], ["Use case design", "Tom Achebe"], ["Dummy data", "Tom Achebe"], ["Training and rollout", "Mei Tan"], ["Firm IT and security", "Wei Ling Ho"], ["Success measurement", "Sofia Lindqvist"], ["Firm sponsor", "Priya Raman"]],
+  nh: [["Pilot coordination", "Sofia Lindqvist"], ["Use case design", "Lars Berg"]],
+  bw: [["Pilot coordination", "Chloe Nguyen"], ["Use case design", "Mei Tan"], ["Dummy data", "Mei Tan"]],
+  lh: [["Pilot coordination", "Jonas Weber"], ["Use case design", "Anna Kruger"], ["Training and rollout", "Anna Kruger"], ["Success measurement", "Jonas Weber"]],
+  cr: [["Pilot coordination", "Marcus Hill"], ["Use case design", "Tom Achebe"], ["Training and rollout", "Tom Achebe"], ["Success measurement", "Marcus Hill"]]
+};
+
+const WEEKS = ["23 Nov", "30 Nov", "7 Dec", "14 Dec", "21 Dec", "28 Dec"];
+const CAPACITY = {
+  hv: { need: [14, 10, 8, 6, 2, 0], staffed: [10, 10, 6, 6, 2, 0], driver: ["Plan review and dummy data", "Kickoff and first training", "Training, Singapore", "Live usage support", "Light support", "Holiday"] },
+  nh: { need: [6, 4, 4, 2, 0, 0], staffed: [6, 4, 2, 2, 0, 0], driver: ["Discovery prep", "Pia draft review", "Dummy data", "Kickoff", "Holiday", "Holiday"] },
+  bw: { need: [10, 8, 8, 6, 4, 2], staffed: [10, 8, 8, 6, 4, 2], driver: ["Plan review", "Kickoff", "First training", "Live usage", "Live usage", "Light support"] },
+  lh: { need: [8, 8, 6, 6, 4, 2], staffed: [8, 8, 6, 6, 4, 2], driver: ["Usage review", "Tax memo coaching", "Live usage", "Live usage", "Light support", "Holiday"] },
+  cr: { need: [22, 18, 12, 10, 6, 4], staffed: [10, 10, 10, 10, 6, 4], driver: ["Overdue training, 2 sessions", "Litigation workflows", "Privilege review set-up", "Live usage", "Light support", "Light support"] }
+};
+
+const DIGESTS = [
+  { week: "Week of 9 Nov", sent: "Mon 16 Nov, 08:00", items: [["Lindenberg Hoffmann", "Live usage", "72% of associates active", "Low"], ["Castellan & Rowe", "First training", "Training slipped a week", "High"], ["Brightwater Legal", "Discovery calls", "Scoping call booked", "Low"]] },
+  { week: "Week of 2 Nov", sent: "Mon 9 Nov, 08:00", items: [["Lindenberg Hoffmann", "Live usage", "Fund review grid in use", "Low"], ["Castellan & Rowe", "Kickoff", "Kickoff held, 2 criteria agreed", "Medium"]] },
+  { week: "Week of 26 Oct", sent: "Mon 2 Nov, 08:00", items: [["Lindenberg Hoffmann", "First training", "48 associates trained", "Low"], ["Castellan & Rowe", "Plan approved", "Plan approved by Tom Achebe", "Low"]] },
+  { week: "Week of 19 Oct", sent: "Mon 26 Oct, 08:00", items: [["Lindenberg Hoffmann", "Kickoff", "Kickoff held", "Low"], ["Castellan & Rowe", "Discovery calls", "First discovery call", "Low"]] }
+];
+
+const SOURCES = [["Salesforce", "Deals", "09:41"], ["Gong", "Calls", "12 Nov"], ["Granola", "Calls", "14 Nov"], ["Notion", "Library and pages", "09:30"], ["Google Calendar", "Free/busy", "09:41"], ["Slack", "Summaries", "Mon 08:00"]];

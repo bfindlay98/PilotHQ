@@ -186,7 +186,7 @@ function approvalWrites(pilot, run) {
 }
 
 function canView(roleKey, pilot) {
-  if (roleKey === "growth") return true;
+  if (roleKey === "esm") return true;
   if (roleKey === "aie") return false; // AI Enablement sees run logs and tests, not pilot content
   return pilot.team.includes(ROLES[roleKey].name);
 }
