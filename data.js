@@ -60,100 +60,69 @@ const CALLS = {
   }
 };
 
-const LIBRARY = [
-  { id: "L-014", summary: "UK firm, 200 users, Banking and Finance", useCase: "Facility agreement review against standard positions", configured: "Tabular Review grid, 32 columns of standard lending positions, red flag column", keywords: ["facility", "agreements", "review", "banking", "standard", "positions"] },
-  { id: "L-021", summary: "Nordic firm, 120 users, Disputes", useCase: "Chronology from a large document set", configured: "Agent with a chronology template, 400 invented emails and witness notes", keywords: ["chronology", "chronologies", "disputes", "document", "sets", "trainees"] },
-  { id: "L-009", summary: "APAC firm, 90 users, Real Estate", useCase: "Lease abstraction", configured: "Tabular Review, 18 columns including break dates and rent review", keywords: ["lease", "leases", "rent", "review", "break", "clauses"] },
-  { id: "L-017", summary: "US firm, 250 users, Corporate", useCase: "Due diligence report first draft", configured: "Workflows template for a red-flag DD report from a data room index", keywords: ["due", "diligence", "reports", "corporate", "draft"] },
-  { id: "L-025", summary: "UK firm, 80 users, Employment", useCase: "Grievance response first drafts", configured: "Workflows template with tone and policy checks", keywords: ["employment", "grievances", "grievance", "responses", "drafting"] },
-  { id: "L-030", summary: "Australian firm, 60 users, Construction", useCase: "Subcontract review for time bars", configured: "Tabular Review, 12 columns for notice periods and time bars", keywords: ["subcontracts", "time", "bars", "construction", "liquidated"] }
-];
-
-// What the mock model "returns" for each pilot. It only sees calls that were read.
-// Each candidate cites a call line and a quote; the source check (code) verifies the quote is really there.
+// What the model "returns" for each pilot. It only sees calls that were read.
+// Each idea is what the firm asked for, in the firm's words, with the sentence it came from.
+// The source check (code) verifies every quote is really there. "terms" are what Pia searches for when it follows up a gap.
 const MOCK_MODEL = {
   hv: {
-    candidates: [
-      { id: "uc-fa", title: "First-pass review of facility agreements against the firm's standard positions", practice: "Banking and Finance", feature: "Tabular Review",
-        cite: { call: "g1", i: 1, quote: "reviewing facility agreements against our standard positions" },
-        criterion: { text: "First-pass review time per facility agreement cut by half", cite: { call: "g1", i: 3, quote: "cut first-pass review time in half" } },
-        criterionIfCall: { g2: { text: "First-pass review from one day to half a day per agreement, on at least 20 agreements", cite: { call: "g2", i: 1, quote: "from a day to half a day per agreement" } } } },
-      { id: "uc-chron", title: "First-draft chronologies from large document sets", practice: "Disputes", feature: "Agent",
-        cite: { call: "g1", i: 4, quote: "building chronologies from large document sets" },
-        criterion: { text: "A trainee produces a first-draft chronology in one day instead of one week", cite: { call: "gr1", i: 2, quote: "a first draft in a day instead of a week" } } },
-      { id: "uc-dd", title: "First-pass due diligence reports", practice: "Corporate", feature: "Workflows",
-        cite: { call: "g1", i: 6, quote: "draft first-pass due diligence reports" },
-        criterion: null },
-      { id: "uc-lease", title: "Lease review for rent review and break clauses", practice: "Real Estate", feature: "Tabular Review",
-        cite: { call: "g1", i: 11, quote: "lease reviews, mostly rent review and break clauses" },
-        criterion: { text: "Every break clause caught in a sample of 50 leases", cite: { call: "gr1", i: 5, quote: "every break clause is caught in a sample of fifty leases" } } },
-      { id: "uc-griev", needs: "g2", title: "First-draft responses to employee grievances", practice: "Employment", feature: "Workflows",
-        cite: { call: "g2", i: 0, quote: "drafting responses to employee grievances" },
-        criterion: null },
-      // The mock model also returns one plausible use case nobody asked for. The source check must remove it (AC4).
-      { id: "uc-spa", title: "Drafting share purchase agreements", practice: "Corporate", feature: "Agent",
-        cite: { call: "g1", i: 6, quote: "draft share purchase agreements" },
-        criterion: { text: "SPA first draft in two hours", cite: null } }
-    ],
-    practicesMentioned: [
-      { practice: "Employment", cite: { call: "g1", i: 7, quote: "Employment is interested too" }, question: "Employment is interested but the calls don't say what they would use it for. Ask Priya which tasks they want to test." }
-    ],
-    extraGaps: [
-      { id: "gap-partner", text: "Partners will judge output on whether they would send it to a client. How will that be scored? Suggest a 1 to 5 partner rating on a sample of outputs.", cite: { call: "g1", i: 9, quote: "something they would actually send to a client" } }
-    ],
-    dummy: {
-      "uc-fa": { brief: "Three invented facility agreements (term loan, revolving credit, sustainability-linked), each with 5 to 8 departures from standard positions for the review grid to catch.",
-        docs: [{ title: "Facility agreement: Northgate Ferries Ltd and Lyonsbridge Bank plc", body: "GBP 35,000,000 term facility. Clause 22.1 Financial covenants: Leverage must not exceed 4.25:1 on each test date. Clause 24.6 Cross default: threshold GBP 2,500,000 (departs from the standard GBP 5,000,000). Clause 27 Changes to the lenders: assignment without borrower consent after an event of default only." }] },
-      "uc-chron": { brief: "A bundle of 300 invented emails, board minutes and witness notes from a shipping contract dispute, with 25 key dates for the chronology to find.",
-        docs: [{ title: "Dispute bundle: charter party delay claim", body: "Email, 4 March 2025, from the operations director of Meridian Shipping to the charterer: the vessel will miss the laycan window by six days. Board minutes, 11 March 2025: the delay notice was not served within the contractual period." }],
-        redraft: [{ title: "Dispute bundle: charter party delay claim", body: "Email, 4 March 2025, from the operations director of Corran Freight Ltd to the charterer: the vessel will miss the laycan window by six days. Board minutes, 11 March 2025: the delay notice was not served within the contractual period." }] },
-      "uc-dd": { brief: "An invented data room index for the acquisition of a mid-size logistics company, with planted red flags (change of control, unpaid tax, expired licences).",
-        docs: [{ title: "Data room index: Project Wren", body: "1.1 Articles of association. 2.4 Customer contract with change of control clause (planted red flag). 3.2 HMRC correspondence on unpaid VAT (planted red flag). 5.1 Operating licences, two expired in 2025 (planted red flag)." }] },
-      "uc-lease": { brief: "Fifty invented commercial leases with varied break clauses and rent review mechanisms, 12 with conditional breaks that are easy to miss.",
-        docs: [{ title: "Lease: Unit 4, Fenwick Trade Park", body: "Term 10 years from 1 June 2024. Clause 8 Break: the tenant may end this lease on the fifth anniversary on six months' written notice, conditional on no rent arrears. Clause 6 Rent review: upwards only, open market, every five years." }] },
-      "uc-griev": { brief: "Five invented employee grievance letters with an invented staff handbook, covering pay, working hours and a manager complaint.",
-        docs: [{ title: "Grievance letter: flexible working request refused", body: "I am raising a formal grievance about the refusal of my flexible working request dated 2 September 2026. The reasons given do not match section 4.3 of the staff handbook." }] }
-    }
+    ideas: [
+      { id: "i-fa", topic: "facility agreement review", text: "Reviewing facility agreements against our standard positions", practice: "Banking and Finance",
+        cite: { call: "g1", i: 1, quote: "reviewing facility agreements against our standard positions" }, clarity: "clear",
+        successQuote: { call: "g1", i: 3, quote: "cut first-pass review time in half" }, terms: ["facility", "banking"] },
+      { id: "i-chron", topic: "chronologies", text: "Building chronologies from large document sets", practice: "Disputes",
+        cite: { call: "g1", i: 4, quote: "building chronologies from large document sets" }, clarity: "clear",
+        successQuote: { call: "gr1", i: 2, quote: "a first draft in a day instead of a week" }, terms: ["chronolog"] },
+      { id: "i-dd", topic: "due diligence reports", text: "Draft first-pass due diligence reports for the corporate team", practice: "Corporate",
+        cite: { call: "g1", i: 6, quote: "draft first-pass due diligence reports for the corporate team" }, clarity: "clear",
+        successQuote: null, terms: ["due diligence", "corporate"] },
+      // Vague, no success quote: Pia finds it in another call.
+      { id: "i-lease", topic: "lease review", text: "Lease reviews, mostly rent review and break clauses", practice: "Real Estate",
+        cite: { call: "g1", i: 11, quote: "lease reviews, mostly rent review and break clauses" }, clarity: "vague",
+        successQuote: null, terms: ["lease", "break clause"] },
+      // Vague, no success quote: not in another call or the deal notes, so it becomes a question for the Account Executive.
+      { id: "i-emp", topic: "employment work", text: "Employment is interested too", practice: "Employment",
+        cite: { call: "g1", i: 7, quote: "Employment is interested too" }, clarity: "vague",
+        successQuote: null, terms: ["employment"] },
+      // The model also returns one plausible idea nobody asked for. The source check must remove it.
+      { id: "i-spa", topic: "share purchase agreements", text: "Draft share purchase agreements", practice: "Corporate",
+        cite: { call: "g1", i: 6, quote: "draft share purchase agreements" }, clarity: "clear", successQuote: null, terms: [] }
+    ]
   },
   bw: {
-    candidates: [
-      { id: "uc-bw-sub", title: "Subcontract review for liquidated damages and time bars", practice: "Construction", feature: "Tabular Review",
-        cite: { call: "grb1", i: 0, quote: "review subcontracts for liquidated damages and time bars" },
-        criterion: { text: "Every time bar flagged in a sample of 30 subcontracts", cite: { call: "grb1", i: 1, quote: "every time bar flagged in a sample of thirty subcontracts" } } },
-      { id: "uc-bw-ins", title: "Drafting advice notes for the insurance team", practice: "Insurance", feature: "Agent",
-        cite: { call: "gb1", i: 0, quote: "drafting advice notes for the insurance team" },
-        criterion: null }
-    ],
-    practicesMentioned: [], extraGaps: [],
-    dummy: { "uc-bw-sub": { brief: "Thirty invented subcontracts with varied time bars.", docs: [{ title: "Subcontract: Kingsford Civil and Harlow Steel", body: "Clause 14 Notice of claim: within 28 days of the event, failing which the claim is barred." }] } }
+    ideas: [
+      { id: "i-bw-sub", topic: "subcontract review", text: "Review subcontracts for liquidated damages and time bars", practice: "Construction",
+        cite: { call: "grb1", i: 0, quote: "review subcontracts for liquidated damages and time bars" }, clarity: "clear",
+        successQuote: { call: "grb1", i: 1, quote: "every time bar flagged in a sample of thirty subcontracts" }, terms: ["subcontract"] },
+      { id: "i-bw-ins", topic: "insurance advice notes", text: "Drafting advice notes for the insurance team", practice: "Insurance",
+        cite: { call: "gb1", i: 0, quote: "drafting advice notes for the insurance team" }, clarity: "clear", successQuote: null, terms: ["insurance"] }
+    ]
   }
 };
 
 const PILOTS = [
-  { id: "hv", firm: "Harrow & Vale LLP", region: "London and Singapore", users: 150, days: 60, stage: "Proof of value",
+  { id: "hv", firm: "Harrow & Vale LLP", region: "London, Singapore and New York", practice: "Banking and Finance", users: 150, days: 60, stage: "Proof of value",
     ae: "Sofia Lindqvist", les: ["Tom Achebe", "Mei Tan"], team: ["Sofia Lindqvist", "Tom Achebe", "Mei Tan"],
     calls: ["g1", "gr1"], laterCall: "g2",
     salesforce: { opportunity: "Harrow & Vale: firmwide licence", amount: "GBP 480,000 a year", owner: "Sofia Lindqvist", closeDate: "31 Jan 2027",
-      screen: { firm: ["Harrow & Vale", "Harrow and Vale"], clients: ["Meridian Shipping", "Albion Retail Group", "Albion Retail"], matters: ["Project Larch"], fees: ["480,000"] },
-      people: ["Priya Raman", "James Okafor", "Wei Ling Ho"] },
+      notes: ["Champion is Priya Raman, Head of Innovation.", "Banking is the lead practice. Partners want proof before a firmwide licence.", "Budgets close at the end of January."] },
     calendar: {
-      session: "First rollout training: banking associates (London and Singapore), 60 min",
+      session: "First rollout training: banking associates, 60 min",
       sessionCite: { call: "gr1", i: 4, quote: "Start with the banking associates in Singapore" },
       internal: [
         { name: "Sofia Lindqvist", city: "Stockholm", off: 1, busy: [["Wed", 9]] },
         { name: "Tom Achebe", city: "London", off: 0, busy: [["Mon", 8]] },
         { name: "Mei Tan", city: "Singapore", off: 8, busy: [["Tue", 8], ["Tue", 9], ["Fri", 8], ["Fri", 9]] }
       ],
-      firm: [{ name: "Priya Raman", city: "London", off: 0 }, { name: "Wei Ling Ho", city: "Singapore", off: 8 }]
+      firm: [{ name: "Priya Raman", city: "London", off: 0 }, { name: "Wei Ling Ho", city: "Singapore", off: 8 }, { name: "Daniel Brooks", city: "New York", off: -5 }]
     },
     leNeed: 14, leStaffed: 10 },
-  { id: "nh", firm: "Nordhavn Advokatfirma", region: "Nordics", users: 100, days: 30, stage: "Pilot: design",
+  { id: "nh", firm: "Nordhavn Advokatfirma", region: "Nordics", practice: "Disputes", users: 100, days: 30, stage: "Pilot: design",
     ae: "Sofia Lindqvist", les: ["Lars Berg"], team: ["Sofia Lindqvist", "Lars Berg"], calls: [],
-    salesforce: { opportunity: "Nordhavn: disputes team", amount: "NOK 2,100,000 a year", owner: "Sofia Lindqvist", closeDate: "15 Feb 2027", screen: { firm: ["Nordhavn"], clients: [], matters: [], fees: [] }, people: [] },
+    salesforce: { opportunity: "Nordhavn: disputes team", amount: "NOK 2,100,000 a year", owner: "Sofia Lindqvist", closeDate: "15 Feb 2027", notes: [] },
     leNeed: 6, leStaffed: 6 },
-  { id: "bw", firm: "Brightwater Legal", region: "Australia", users: 120, days: 60, stage: "Pilot: design",
+  { id: "bw", firm: "Brightwater Legal", region: "Australia", practice: "Construction", users: 120, days: 60, stage: "Pilot: design",
     ae: "Chloe Nguyen", les: ["Mei Tan"], team: ["Chloe Nguyen", "Mei Tan"], calls: ["gb1", "grb1"],
-    salesforce: { opportunity: "Brightwater: construction and insurance", amount: "AUD 390,000 a year", owner: "Chloe Nguyen", closeDate: "28 Feb 2027", screen: { firm: ["Brightwater"], clients: [], matters: [], fees: [] }, people: [] },
+    salesforce: { opportunity: "Brightwater: construction and insurance", amount: "AUD 390,000 a year", owner: "Chloe Nguyen", closeDate: "28 Feb 2027", notes: ["Construction team leads the pilot."] },
     leNeed: 10, leStaffed: 10 },
   { id: "lh", firm: "Lindenberg Hoffmann", region: "Germany", users: 180, days: 90, stage: "Pilot: running", static: true,
     ae: "Jonas Weber", les: ["Anna Kruger"], team: ["Jonas Weber", "Anna Kruger"],
@@ -171,7 +140,7 @@ const ROLES = {
   out: { name: "Lars Berg", title: "Legal Engineer, Nordics", label: "Outside the deal team" }
 };
 
-// Test set: 24 labelled past pilots (fictional).
+// Test set: 24 labelled past pilots (fictional). Columns: id, practice, ideas labelled, found, invented.
 const TEST_SET = [
   ["T01", "UK, Banking", 5, 5, 0], ["T02", "UK, Disputes", 4, 4, 0], ["T03", "Nordics, Corporate", 3, 2, 0], ["T04", "Germany, Real Estate", 4, 4, 0],
   ["T05", "US, Litigation", 5, 4, 0], ["T06", "APAC, Banking", 4, 3, 0], ["T07", "UK, Employment", 3, 3, 0], ["T08", "Australia, Construction", 4, 4, 0],
@@ -182,10 +151,11 @@ const TEST_SET = [
 ];
 
 // ---------- People, firms, tasks, capacity, digests (all fictional) ----------
+// booked/hours: Legal Engineer hours this week. Pia proposes owners from specialities and free hours.
 const PEOPLE = [
   { name: "Tom Achebe", title: "Legal Engineer", org: "ABC Inc.", city: "London", off: 0, specialities: ["Banking and Finance", "Real Estate"], languages: ["English"], booked: 28, hours: 35, color: "#3E6B5A" },
   { name: "Mei Tan", title: "Legal Engineer", org: "ABC Inc.", city: "Singapore", off: 8, specialities: ["Disputes", "Construction"], languages: ["English", "Mandarin"], booked: 33, hours: 35, color: "#7A5C3E" },
-  { name: "Lars Berg", title: "Legal Engineer", org: "ABC Inc.", city: "Oslo", off: 1, specialities: ["Disputes", "Employment"], languages: ["Norwegian", "English"], booked: 20, hours: 35, color: "#4A5D7E" },
+  { name: "Lars Berg", title: "Legal Engineer", org: "ABC Inc.", city: "Oslo", off: 1, specialities: ["Disputes", "Employment"], languages: ["Norwegian", "English"], booked: 33, hours: 35, color: "#4A5D7E" },
   { name: "Anna Kruger", title: "Legal Engineer", org: "ABC Inc.", city: "Berlin", off: 1, specialities: ["Corporate", "Funds"], languages: ["German", "English"], booked: 30, hours: 35, color: "#6E4A6B" },
   { name: "Ravi Menon", title: "Legal Engineer", org: "ABC Inc.", city: "New York", off: -5, specialities: ["Litigation", "IP"], languages: ["English", "Hindi"], booked: 14, hours: 35, color: "#5B6B3A" },
   { name: "Sofia Lindqvist", title: "Account Executive", org: "ABC Inc.", city: "Stockholm", off: 1, specialities: ["UK and Nordic law firms"], languages: ["Swedish", "English"], color: "#8A4B3C" },
@@ -196,27 +166,19 @@ const PEOPLE = [
   { name: "Jo Reyes", title: "AI Enablement", org: "ABC Inc.", city: "London", off: 0, specialities: ["Agent quality", "Test sets"], languages: ["English", "Spanish"], color: "#6B4FD8" },
   { name: "Priya Raman", title: "Head of Innovation", org: "hv", city: "London", off: 0, specialities: ["Cares about: a decision by end of January", "Partner buy-in"], languages: ["English"], color: "#9A6A2F" },
   { name: "James Okafor", title: "Partner, Banking and Finance", org: "hv", city: "London", off: 0, specialities: ["Cares about: cutting first-pass review time", "Refinancings"], languages: ["English"], color: "#5A4A7A" },
+  { name: "Daniel Brooks", title: "Partner, Banking and Finance (US)", org: "hv", city: "New York", off: -5, specialities: ["Cares about: US associates trained live", "Acquisition finance"], languages: ["English"], color: "#4E6A8A" },
   { name: "Wei Ling Ho", title: "IT Director", org: "hv", city: "Singapore", off: 8, specialities: ["Cares about: dummy data only, no client documents", "Bilingual contracts"], languages: ["English", "Mandarin"], color: "#2F6A6A" }
 ];
 
 const FIRMS = {
-  hv: { about: "Full-service UK firm with a strong finance and disputes practice.", hq: "London", offices: ["London", "Singapore"], lawyers: 420, practices: ["Banking and Finance", "Disputes", "Corporate", "Real Estate", "Employment"] },
+  hv: { about: "Full-service UK firm with a strong finance and disputes practice.", hq: "London", offices: ["London", "Singapore", "New York"], lawyers: 420, practices: ["Banking and Finance", "Disputes", "Corporate", "Real Estate", "Employment"] },
   nh: { about: "Norwegian business law firm.", hq: "Oslo", offices: ["Oslo", "Bergen"], lawyers: 160, practices: ["Disputes", "Energy", "Corporate"] },
   bw: { about: "Australian firm focused on construction and insurance.", hq: "Sydney", offices: ["Sydney", "Melbourne", "Brisbane"], lawyers: 210, practices: ["Construction", "Insurance", "Property"] },
   lh: { about: "German corporate and funds firm.", hq: "Frankfurt", offices: ["Frankfurt", "Munich", "Hamburg"], lawyers: 300, practices: ["Corporate", "Funds", "Tax"] },
   cr: { about: "US East Coast litigation boutique.", hq: "New York", offices: ["New York", "Boston"], lawyers: 260, practices: ["Litigation", "IP", "Employment"] }
 };
 
-const LIB_EXTRA = {
-  "L-014": { practice: "Banking and Finance", outcome: "Firm bought firmwide. Grid reused in 3 later pilots." },
-  "L-021": { practice: "Disputes", outcome: "Firm bought for the disputes group. First drafts in one day." },
-  "L-009": { practice: "Real Estate", outcome: "Firm bought. 94% of break clauses caught on the sample." },
-  "L-017": { practice: "Corporate", outcome: "Extended pilot, then bought." },
-  "L-025": { practice: "Employment", outcome: "Firm bought for HR advisory team." },
-  "L-030": { practice: "Construction", outcome: "Firm bought. Template now standard for construction pilots." }
-};
-
-const STAGES = ["Discovery calls", "Plan drafted", "Plan approved", "Kickoff", "First training", "Live usage", "Readout", "Decision"];
+const STAGES = ["Discovery calls", "Ideas from the calls", "Plan agreed", "Kickoff", "First training", "Live usage", "Readout", "Decision"];
 const PROGRESS = {
   hv: { dates: ["12 Nov", "18 Nov", "18 Nov", "25 Nov", "30 Nov", "Dec to Jan", "22 Jan", "31 Jan"], owners: ["Sofia Lindqvist", "Tom Achebe", "Tom Achebe", "Sofia Lindqvist", "Mei Tan", "Sofia Lindqvist", "Sofia Lindqvist", "Priya Raman"], decision: "31 Jan 2027", readout: "22 Jan 2027", daysLeft: 60 },
   nh: { current: 0, blocked: true, dates: ["Not booked", "", "", "", "", "", "", "15 Feb"], owners: ["Sofia Lindqvist", "Lars Berg", "Lars Berg", "Sofia Lindqvist", "Lars Berg", "Sofia Lindqvist", "Sofia Lindqvist", "Firm"], decision: "15 Feb 2027", readout: "5 Feb 2027", daysLeft: 30 },
@@ -227,15 +189,14 @@ const PROGRESS = {
     criteria: [["Deposition summaries in 2 hours", "On track"], ["Privilege review accuracy above 95%", "Not started"], ["Not agreed: IP team measure", "Not started"], ["Not agreed: employment team measure", "Not started"], ["Not agreed: partner rating", "Not started"]] }
 };
 
-// dueDay: days after Wed 18 Nov 2026 (0 = today)
+// dueDay: days after Wed 18 Nov 2026 (0 = today). after: "run" shows once Pia's run is waiting for people; "plan" once Tom confirms the ideas.
 const TASKS = [
-  { id: "t1", pid: "hv", stage: 1, after: "run", title: "Review and approve Pia's draft plan", owner: "Tom Achebe", due: "Today", dueDay: 0, tab: "usecases" },
-  { id: "t2", pid: "hv", stage: 1, after: "run", title: "Check the dummy data has no deal facts", owner: "Tom Achebe", due: "Today", dueDay: 0, tab: "dummy" },
-  { id: "t3", pid: "hv", stage: 1, after: "run", title: "Chase open questions with Priya Raman", owner: "Sofia Lindqvist", due: "Fri 20 Nov", dueDay: 2, tab: "gaps" },
-  { id: "t4", pid: "hv", stage: 3, after: "approve", title: "Send the first training invite", owner: "Sofia Lindqvist", due: "Thu 19 Nov", dueDay: 1, tab: "schedule" },
-  { id: "t5", pid: "hv", stage: 3, after: "approve", title: "Draft the kickoff agenda", owner: "Sofia Lindqvist", due: "Mon 23 Nov", dueDay: 5, pia: "Ask Pia to draft the kickoff agenda" },
-  { id: "t6", pid: "hv", stage: 3, after: "approve", title: "Confirm success criteria with Priya Raman", owner: "Sofia Lindqvist", due: "Tue 24 Nov", dueDay: 6 },
-  { id: "t7", pid: "hv", stage: 3, after: "approve", title: "Set up the review workspace with the dummy agreements", owner: "Mei Tan", due: "Tue 24 Nov", dueDay: 6 },
+  { id: "t1", pid: "hv", stage: 1, after: "run", title: "Keep, merge or drop the ideas from the calls", owner: "Tom Achebe", due: "Today", dueDay: 0, tab: "ideas" },
+  { id: "t2", pid: "hv", stage: 1, after: "run", title: "Confirm task owners for Harrow & Vale", owner: "Dana Whitfield", due: "Today", dueDay: 0, route: "approvals" },
+  { id: "t3", pid: "hv", stage: 1, after: "run", title: "Ask the firm the open questions", owner: "Sofia Lindqvist", due: "Fri 20 Nov", dueDay: 2, tab: "overview" },
+  { id: "t4", pid: "hv", stage: 1, after: "run", title: "Send the first training invites", owner: "Sofia Lindqvist", due: "Thu 19 Nov", dueDay: 1, tab: "schedule" },
+  { id: "t5", pid: "hv", stage: 3, after: "plan", title: "Draft the kickoff agenda", owner: "Sofia Lindqvist", due: "Mon 23 Nov", dueDay: 5, pia: "Ask Pia to draft the kickoff agenda" },
+  { id: "t6", pid: "hv", stage: 3, after: "plan", title: "Agree success criteria with Priya Raman", owner: "Tom Achebe", due: "Tue 24 Nov", dueDay: 6 },
   { id: "t8", pid: "cr", stage: 4, title: "Run the overdue first training for the litigation team", owner: "Tom Achebe", due: "Fri 20 Nov", dueDay: 2 },
   { id: "t9", pid: "cr", stage: 4, title: "Agree the 3 missing success criteria", owner: "Marcus Hill", due: "Thu 19 Nov", dueDay: 1 },
   { id: "t10", pid: "cr", stage: 4, title: "Approve extra Legal Engineer hours", owner: "Dana Whitfield", due: "Today", dueDay: 0, route: "approvals" },
@@ -244,12 +205,12 @@ const TASKS = [
   { id: "t13", pid: "nh", stage: 0, title: "Book and record a discovery call", owner: "Sofia Lindqvist", due: "Fri 20 Nov", dueDay: 2 },
   { id: "t14", pid: "nh", stage: 0, title: "Prepare discovery questions for the disputes team", owner: "Lars Berg", due: "Thu 19 Nov", dueDay: 1 },
   { id: "t15", pid: "bw", stage: 1, title: "Ask the firm to agree to AI processing for the 10 Nov call", owner: "Chloe Nguyen", due: "Thu 19 Nov", dueDay: 1 },
-  { id: "t16", pid: "bw", stage: 1, title: "Review and approve Pia's draft plan", owner: "Mei Tan", due: "Today", dueDay: 0, tab: "usecases" },
+  { id: "t16", pid: "bw", stage: 1, title: "Keep, merge or drop the ideas from the calls", owner: "Mei Tan", due: "Today", dueDay: 0, tab: "ideas" },
   { id: "t17", pid: null, stage: 0, title: "Review pilot priorities for December", owner: "Dana Whitfield", due: "Fri 27 Nov", dueDay: 9, route: "pilots" }
 ];
 
 const WORKSTREAMS = {
-  hv: [["Pilot coordination", "Sofia Lindqvist"], ["Use case design", "Tom Achebe"], ["Dummy data", "Tom Achebe"], ["Training and rollout", "Mei Tan"], ["Firm IT and security", "Wei Ling Ho"], ["Success measurement", "Sofia Lindqvist"], ["Firm sponsor", "Priya Raman"]],
+  hv: [["Pilot coordination", "Sofia Lindqvist"], ["Use case design", "Tom Achebe"], ["Dummy data", "Tom Achebe"], ["Training and rollout", "Mei Tan"], ["Firm IT and security", "Wei Ling Ho"], ["Success measurement", "Tom Achebe"], ["Firm sponsor", "Priya Raman"]],
   nh: [["Pilot coordination", "Sofia Lindqvist"], ["Use case design", "Lars Berg"]],
   bw: [["Pilot coordination", "Chloe Nguyen"], ["Use case design", "Mei Tan"], ["Dummy data", "Mei Tan"]],
   lh: [["Pilot coordination", "Jonas Weber"], ["Use case design", "Anna Kruger"], ["Training and rollout", "Anna Kruger"], ["Success measurement", "Jonas Weber"]],
@@ -258,9 +219,9 @@ const WORKSTREAMS = {
 
 const WEEKS = ["23 Nov", "30 Nov", "7 Dec", "14 Dec", "21 Dec", "28 Dec"];
 const CAPACITY = {
-  hv: { need: [14, 10, 8, 6, 2, 0], staffed: [10, 10, 6, 6, 2, 0], driver: ["Plan review and dummy data", "Kickoff and first training", "Training, Singapore", "Live usage support", "Light support", "Holiday"] },
-  nh: { need: [6, 4, 4, 2, 0, 0], staffed: [6, 4, 2, 2, 0, 0], driver: ["Discovery prep", "Pia draft review", "Dummy data", "Kickoff", "Holiday", "Holiday"] },
-  bw: { need: [10, 8, 8, 6, 4, 2], staffed: [10, 8, 8, 6, 4, 2], driver: ["Plan review", "Kickoff", "First training", "Live usage", "Live usage", "Light support"] },
+  hv: { need: [14, 10, 8, 6, 2, 0], staffed: [10, 10, 6, 6, 2, 0], driver: ["Use case set-up", "Kickoff and first training", "Training, Singapore and New York", "Live usage support", "Light support", "Holiday"] },
+  nh: { need: [6, 4, 4, 2, 0, 0], staffed: [6, 4, 2, 2, 0, 0], driver: ["Discovery prep", "Use case design", "Dummy data", "Kickoff", "Holiday", "Holiday"] },
+  bw: { need: [10, 8, 8, 6, 4, 2], staffed: [10, 8, 8, 6, 4, 2], driver: ["Use case set-up", "Kickoff", "First training", "Live usage", "Live usage", "Light support"] },
   lh: { need: [8, 8, 6, 6, 4, 2], staffed: [8, 8, 6, 6, 4, 2], driver: ["Usage review", "Tax memo coaching", "Live usage", "Live usage", "Light support", "Holiday"] },
   cr: { need: [22, 18, 12, 10, 6, 4], staffed: [10, 10, 10, 10, 6, 4], driver: ["Overdue training, 2 sessions", "Litigation workflows", "Privilege review set-up", "Live usage", "Light support", "Light support"] }
 };
@@ -268,8 +229,23 @@ const CAPACITY = {
 const DIGESTS = [
   { week: "Week of 9 Nov", sent: "Mon 16 Nov, 08:00", items: [["Lindenberg Hoffmann", "Live usage", "72% of associates active", "Low"], ["Castellan & Rowe", "First training", "Training slipped a week", "High"], ["Brightwater Legal", "Discovery calls", "Scoping call booked", "Low"]] },
   { week: "Week of 2 Nov", sent: "Mon 9 Nov, 08:00", items: [["Lindenberg Hoffmann", "Live usage", "Fund review grid in use", "Low"], ["Castellan & Rowe", "Kickoff", "Kickoff held, 2 criteria agreed", "Medium"]] },
-  { week: "Week of 26 Oct", sent: "Mon 2 Nov, 08:00", items: [["Lindenberg Hoffmann", "First training", "48 associates trained", "Low"], ["Castellan & Rowe", "Plan approved", "Plan approved by Tom Achebe", "Low"]] },
+  { week: "Week of 26 Oct", sent: "Mon 2 Nov, 08:00", items: [["Lindenberg Hoffmann", "First training", "48 associates trained", "Low"], ["Castellan & Rowe", "Plan agreed", "Plan agreed by Tom Achebe", "Low"]] },
   { week: "Week of 19 Oct", sent: "Mon 26 Oct, 08:00", items: [["Lindenberg Hoffmann", "Kickoff", "Kickoff held", "Low"], ["Castellan & Rowe", "Discovery calls", "First discovery call", "Low"]] }
 ];
 
-const SOURCES = [["Salesforce", "Deals", "09:41"], ["Gong", "Calls", "12 Nov"], ["Granola", "Calls", "14 Nov"], ["Notion", "Library and pages", "09:30"], ["Google Calendar", "Free/busy", "09:41"], ["Slack", "Summaries", "Mon 08:00"]];
+const SOURCES = [["Salesforce", "Deals", "09:41"], ["Gong", "Calls", "12 Nov"], ["Granola", "Calls", "14 Nov"], ["Notion", "Pilot pages", "09:30"], ["Google Calendar", "Free/busy", "09:41"], ["Slack", "Summaries", "Mon 08:00"]];
+
+// Learning store (fictional). People's decisions become labels; approved ideas, with client details removed, become examples.
+const LEARNING = {
+  weeks: ["26 Oct", "2 Nov", "9 Nov", "16 Nov"],
+  ideasKept: [58, 66, 73, 81],
+  ownersAccepted: [70, 74, 79, 83],
+  examples: { "Banking and Finance": { label: "Banking", n: 3 }, "Construction": { label: "Construction", n: 2 }, "Disputes": { label: "Disputes", n: 2 } },
+  labels: [
+    { at: "16 Nov", pilot: "UK firm, Litigation", kind: "Idea kept", detail: "Deposition summaries, kept unchanged", by: "Legal Engineer" },
+    { at: "16 Nov", pilot: "UK firm, Litigation", kind: "Owner changed", detail: "Privilege review set-up: Ravi Menon to Tom Achebe", by: "Enterprise Sales Manager" },
+    { at: "13 Nov", pilot: "German firm, Funds", kind: "Idea edited", detail: "Fund document review: narrowed to side letters", by: "Legal Engineer" },
+    { at: "13 Nov", pilot: "German firm, Funds", kind: "Idea dropped", detail: "Tax memo translation: not a pilot task", by: "Legal Engineer" },
+    { at: "11 Nov", pilot: "German firm, Funds", kind: "Idea merged", detail: "Two fund review ideas merged into one", by: "Legal Engineer" }
+  ]
+};

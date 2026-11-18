@@ -1,60 +1,69 @@
-// PilotHQ UI. Plain JavaScript, no build step. State lives in memory. Hash routing: #/work, #/pilots/hv/progress, ...
+// PilotHQ UI. Plain JavaScript, no build step. State lives in memory. Hash routing: #/work, #/pilots/hv/ideas, ...
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const jq = s => String(s).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 const BASE = Date.UTC(2026, 10, 18, 9, 41, 0);
 const PERSON = Object.fromEntries(PEOPLE.map(p => [p.name, p]));
 const NAV = {
-  le: [["work", "My work"], ["approvals", "Approvals"], ["pilots", "Pilots"], ["library", "Pilot Library"], ["people", "People"]],
-  ae: [["pilots", "My pilots"], ["work", "My work"], ["library", "Pilot Library"], ["people", "People"]],
-  esm: [["pilots", "Portfolio"], ["work", "My work"], ["approvals", "Approvals"], ["library", "Pilot Library"], ["people", "People"]],
-  aie: [["quality", "Quality"], ["library", "Pilot Library"], ["people", "People"]],
-  out: [["work", "My work"], ["pilots", "Pilots"], ["library", "Pilot Library"], ["people", "People"]]
+  le: [["work", "My work"], ["approvals", "Approvals"], ["pilots", "Pilots"], ["people", "People"]],
+  ae: [["pilots", "My pilots"], ["work", "My work"], ["people", "People"]],
+  esm: [["pilots", "Portfolio"], ["work", "My work"], ["approvals", "Approvals"], ["people", "People"]],
+  aie: [["quality", "Quality"], ["people", "People"]],
+  out: [["work", "My work"], ["pilots", "Pilots"], ["people", "People"]]
 };
 const LANDING = { le: "work", ae: "pilots", esm: "pilots", aie: "quality", out: "work" };
-const PILOT_TABS = [["overview", "Overview"], ["progress", "Progress"], ["usecases", "Use cases"], ["gaps", "Gaps"], ["dummy", "Dummy data"], ["schedule", "Schedule"], ["team", "Team"], ["activity", "Activity"]];
+const PILOT_TABS = [["overview", "Overview"], ["progress", "Progress"], ["ideas", "Ideas"], ["gaps", "Gaps"], ["schedule", "Schedule"], ["team", "Team"], ["activity", "Activity"]];
+const PIA_ACTOR = "Pia (service account, deal team only)";
+const LATER = ["Past-pilot library", "Firm-side tasks and contacts", "Draft success criteria", "Draft dummy data", "Pia sends invites itself"];
 let S;
 
 function freshState() {
   return {
-    role: "le", r: [], pilots: clone(PILOTS), runs: {}, approved: {}, audit: [], clock: 0,
+    role: "le", r: [], pilots: clone(PILOTS), runs: {}, skips: [], audit: [], clock: 0,
     modelDown: false, g2Landed: false, anim: null, panel: null, modal: null, toasts: [],
-    notes: {}, selectedSlot: {}, testRun: null, acResults: null, demoOpen: true, priority: {},
-    done: {}, extraTasks: [], apDone: {}, apFilter: "All", capAdd: {}, piaOpen: true, navOpen: false, q: "", libFilter: "All", actFilter: "All"
+    testRun: null, acResults: null, demoOpen: true, priority: {}, done: {}, extraTasks: [], apDone: {}, apFilter: "All", capAdd: {},
+    piaOpen: true, navOpen: false, q: "", actFilter: "All", qtab: "checks",
+    conf: {}, pick: {}, assigned: {}, slot: {}, sent: {}, labels: [], writes: [], editing: null
   };
 }
 function stamp() { S.clock += 3 + Math.floor(Math.random() * 6); return new Date(BASE + S.clock * 1000).toISOString().slice(11, 19); }
 function log(pid, actor, type, text) { S.audit.push({ at: stamp(), pid, actor, type, text }); }
 function pilot(id) { return S.pilots.find(p => p.id === id); }
 function run(pid) { const r = S.runs[pid]; return r ? r[r.length - 1] : null; }
+function ready(pid) { const r = run(pid); return !!(r && r.status === "waiting" && !(S.anim && S.anim.pid === pid)); }
+function conf(pid) { return S.conf[pid] || (S.conf[pid] = {}); }
 function me() { return ROLES[S.role].name; }
 function toast(msg, kind = "", undo = null) { const id = Math.random(); S.toasts.push({ id, msg, kind, undo }); setTimeout(() => { S.toasts = S.toasts.filter(t => t.id !== id); render(); }, 4500); }
 function go(h) { if (location.hash === "#/" + h) route(); else location.hash = "#/" + h; }
+function label(pid, kind, detail) { S.labels.push({ at: "18 Nov", pilot: pilot(pid).firm, kind, detail, by: me() }); }
+function write(pid, piece, ws) { for (const w of ws) { S.writes.push({ ...w, pid, piece, by: me() }); log(pid, "PilotHQ (after " + me() + " confirmed)", "write", `${w.target}: ${w.what}`); } }
 
 function stepAudit(pid, st) {
-  const type = st.kind === "ai" ? (/^(Read|Search|Plan)/.test(st.label) ? "read" : "draft") : st.label === "Start" ? "start" : st.kind === "fixed" ? "check" : "approval";
-  const actor = st.kind === "fixed" ? "PilotHQ checks (code)" : st.kind === "ai" ? "Pia (service account, deal team only)" : "PilotHQ";
+  const type = st.label === "Start" ? "start" : st.kind === "fixed" ? "check" : st.kind === "decision" ? "decision" : st.kind === "ai" ? (st.label === "Pull out ideas" ? "draft" : "read") : "waiting";
+  const actor = st.kind === "fixed" ? "PilotHQ checks (code)" : st.kind === "person" ? "PilotHQ" : PIA_ACTOR;
   return { actor, type, text: `${st.label}: ${st.detail}` };
 }
 
 function seed() {
   for (const id of ["nh", "bw"]) {
-    const r = runPia(pilot(id), { trigger: "Deal reached pilot stage in Salesforce" }); r.version = 1; S.runs[id] = [r];
+    const r = runPia(pilot(id), { trigger: "Deal reached pilot stage in Salesforce", kind: "stage", now: S.clock }); r.version = 1; S.runs[id] = [r];
     for (const st of r.steps) { const a = stepAudit(id, st); log(id, a.actor, a.type, a.text); }
   }
-  S.clock += 600;
+  S.clock += 900;
 }
 
 // ---------- derived data ----------
-function tasks() { return [...TASKS, ...S.extraTasks].filter(t => !t.after || (t.after === "run" ? (run(t.pid) && run(t.pid).status === "ready") : S.approved[t.pid])); }
+function tasks() { return [...TASKS, ...S.extraTasks].filter(t => !t.after || (t.after === "run" ? (run(t.pid) && run(t.pid).status === "waiting") : conf(t.pid).ideas)); }
 function capacity(pid) { const c = CAPACITY[pid]; const add = S.capAdd[pid] || {}; return c.need.map((n, w) => ({ need: n, staffed: c.staffed[w] + (add[w] || 0), driver: c.driver[w] })); }
-function stageOf(pid) { if (pid === "hv") return S.approved.hv ? 3 : run("hv") ? 1 : 0; return PROGRESS[pid].current; }
+function stageOf(pid) { if (PROGRESS[pid].current != null && pid !== "hv") return PROGRESS[pid].current; return conf(pid).ideas ? 3 : run(pid) ? 1 : 0; }
 function riskOf(p) {
   const c0 = capacity(p.id)[0]; const short = c0.need - c0.staffed;
   if (p.id === "cr") return short > 0 ? ["High", "Short of Legal Engineer hours; 3 criteria not agreed"] : ["Medium", "3 success criteria not agreed"];
   if (p.id === "lh") return ["Low", ""];
   const r = run(p.id);
   if (r && r.status === "nothing") return ["Medium", "No recorded calls yet"];
+  const fl = openFlags(p.id).length;
+  if (fl) return ["Medium", `${fl} task${fl > 1 ? "s" : ""} with no owner`];
   if (short > 0) return ["Medium", `Short of ${short} Legal Engineer hours this week`];
   return ["Low", ""];
 }
@@ -62,33 +71,100 @@ function nextStep(p) {
   if (p.id === "lh") return "Week 4 usage review, 26 Nov";
   if (p.id === "cr") return "Run the overdue first training";
   const r = run(p.id);
-  if (S.anim && S.anim.pid === p.id) return "Pia is drafting";
+  if (S.anim && S.anim.pid === p.id) return "Pia is reading the calls";
   if (!r) return "Waiting for pilot stage in Salesforce";
   if (r.status === "nothing") return "Book and record a discovery call";
   if (r.status === "failed") return "Retry Pia's run";
-  if (S.approved[p.id]) return "Send the first training invite";
-  return "Legal Engineer to approve Pia's draft";
+  if (r.status === "ambiguous") return "Account Executive to say which deal";
+  if (r.status === "stopped") return "Re-run Pia";
+  if (!conf(p.id).ideas) return `${p.les[0]} to keep, merge or drop the ideas`;
+  if (!conf(p.id).owners) return "Confirm task owners";
+  return "Send the first training invites";
+}
+function ownerOf(pid, pr) { const pk = (S.pick[pid] || {})[pr.id]; return pk !== undefined ? pk : pr.owner; }
+function liveProposals(pid) {
+  const r = run(pid); if (!r) return [];
+  return r.proposals.filter(pr => { const i = r.ideas.find(x => x.id === pr.ideaId); return !i || !["dropped", "merged"].includes(i.status); });
+}
+function openFlags(pid) {
+  if (!conf(pid).owners) return [];
+  return liveProposals(pid).filter(pr => !pr.owner && !(S.pick[pid] || {})[pr.id] && !(S.assigned[pid] || {})[pr.id]);
 }
 function approvals() {
   const items = [];
-  if (S.role === "le") {
-    const r = run("hv");
-    if (r && r.status === "ready" && !S.approved.hv && !(S.anim && S.anim.pid === "hv")) items.push({ id: "hv-plan", pia: true, type: "Pilot plan", pid: "hv", text: r.changes && r.changes.length ? `Pia's updated draft after the follow-up call: ${r.changes.length} changes` : `Pia's draft plan: ${r.useCases.length} use cases, ${r.gaps.length} questions`, age: "Just now", review: "pilots/hv/usecases" });
-    items.push({ id: "lib-l031", pia: true, type: "Library entry", pid: null, text: "De-identified plan from a finished UK funds pilot, ready to add to the library", age: "2 days" });
+  for (const p of S.pilots) {
+    const r = run(p.id); if (!ready(p.id) || !canView(S.role, p)) continue;
+    if (S.role === "le" && p.les[0] === me() && !conf(p.id).ideas) items.push({ id: "ideas-" + p.id, pia: true, type: "Ideas", pid: p.id, text: r.changes && r.changes.length ? `Pia updated the ideas after the follow-up call: ${r.changes.length} changes` : `${r.ideas.length} ideas from the calls, ${r.questions.length} questions for the firm. Keep, merge or drop each one.`, age: "Just now", review: `pilots/${p.id}/ideas` });
+    if (S.role === "esm" && !conf(p.id).owners && r.proposals.length) items.push({ id: "own-" + p.id, pia: true, kind: "owners", type: "Task owners", pid: p.id, text: `Pia proposed owners for ${r.proposals.length} tasks${r.proposals.some(x => !x.owner) ? `, ${r.proposals.filter(x => !x.owner).length} with no owner` : ""}`, age: p.id === "hv" ? "Just now" : "1 day" });
+    if (S.role === "esm") for (const f of openFlags(p.id)) items.push({ id: "flag-" + f.id, pia: true, kind: "flag", type: "No owner", pid: p.id, prop: f, text: `${f.title}: ${f.flag}`, age: "Just now" });
   }
-  if (S.role === "esm") {
-    items.push({ id: "staff-cr", type: "Staffing", pid: "cr", text: "Castellan & Rowe is short 12 Legal Engineer hours this week. Add Ravi Menon for 12 h.", age: "1 day", apply: () => addCap("cr", 0, 12, "Ravi Menon") });
-    items.push({ id: "staff-hv", type: "Staffing", pid: "hv", text: "Harrow & Vale is short 4 Legal Engineer hours this week. Add Mei Tan for 4 h.", age: "3 hours", apply: () => addCap("hv", 0, 4, "Mei Tan") });
-  }
+  if (S.role === "esm") items.push({ id: "staff-cr", type: "Staffing", pid: "cr", text: "Castellan & Rowe is short 12 Legal Engineer hours this week. Add Ravi Menon for 12 h.", age: "1 day", apply: () => addCap("cr", 0, 12, "Ravi Menon") });
   return items.filter(i => !S.apDone[i.id]);
 }
-function addCap(pid, w, h, who) {
+function addCap(pid, w, h, who, noTask) {
   S.capAdd[pid] = S.capAdd[pid] || {}; S.capAdd[pid][w] = (S.capAdd[pid][w] || 0) + h;
-  S.extraTasks.push({ id: "x" + Math.random().toString(36).slice(2, 7), pid, stage: stageOf(pid), title: `Join ${pilot(pid).firm} for ${h} h: ${CAPACITY[pid].driver[w].toLowerCase()}`, owner: who, due: "Week of " + WEEKS[w], dueDay: 5 + w * 7, assignedBy: me() });
+  if (!noTask) S.extraTasks.push({ id: "x" + Math.random().toString(36).slice(2, 7), pid, stage: stageOf(pid), title: `Join ${pilot(pid).firm} for ${h} h: ${CAPACITY[pid].driver[w].toLowerCase()}`, owner: who, due: "Week of " + WEEKS[w], dueDay: 5 + w * 7, assignedBy: me() });
   const p = pilot(pid); if (!p.team.includes(who)) p.team.push(who);
-  log(pid, me(), "edit", `Assigned ${who} for ${h} h in the week of ${WEEKS[w]}`);
+  log(pid, me(), "confirm", `Assigned ${who} for ${h} h in the week of ${WEEKS[w]}`);
 }
 function visiblePeople() { return PEOPLE.filter(p => p.org === "ABC Inc." || canView(S.role, pilot(p.org))); }
+function lesFree() { return PEOPLE.filter(x => x.hours).map(x => ({ ...x, free: x.hours - x.booked })).sort((a, b) => b.free - a.free); }
+
+// ---------- people's confirmations (shared by the UI and the acceptance checks) ----------
+function ideasProblem(r) {
+  const open = r.ideas.filter(i => i.status === "open").length;
+  if (open) return `${open} idea${open > 1 ? "s" : ""} still to decide`;
+  if (r.ideas.some(i => i.status === "kept" && !i.name.trim())) return "Name every kept use case";
+  if (r.ideas.some(i => i.status === "merged" && (r.ideas.find(x => x.id === i.mergeInto) || {}).status !== "kept")) return "Merge into a kept idea";
+  if (!r.ideas.some(i => i.status === "kept")) return "Keep at least one idea";
+  return "";
+}
+function confirmIdeasCore(pid) {
+  const p = pilot(pid); const r = run(pid);
+  for (const i of r.ideas) {
+    if (i.status === "kept") label(pid, i.edited || i.name !== i.original ? "Idea edited" : "Idea kept", `${i.topic}: kept as "${i.name}"`);
+    if (i.status === "merged") label(pid, "Idea merged", `${i.topic} merged into ${(r.ideas.find(x => x.id === i.mergeInto) || {}).topic}`);
+    if (i.status === "dropped") label(pid, "Idea dropped", i.topic);
+  }
+  const ws = confirmWrites("ideas", p, r, { by: me() });
+  conf(pid).ideas = { by: me(), writes: ws };
+  log(pid, me(), "confirm", `Confirmed the ideas: ${r.ideas.filter(i => i.status === "kept").length} kept, ${r.ideas.filter(i => i.status === "merged").length} merged, ${r.ideas.filter(i => i.status === "dropped").length} dropped`);
+  write(pid, "ideas", ws);
+  log(pid, "Slack", "write", slackText(pid));
+  S.done.t1 = true;
+}
+function confirmOwnersCore(pid) {
+  const p = pilot(pid); const list = liveProposals(pid).map(pr => ({ pr, owner: ownerOf(pid, pr) }));
+  const made = [];
+  for (const { pr, owner } of list) {
+    if (pr.owner && owner === pr.owner) label(pid, "Owner accepted", `${pr.title}: ${owner}`);
+    else if (owner && pr.owner) label(pid, "Owner changed", `${pr.title}: ${pr.owner} to ${owner}`);
+    else if (owner) label(pid, "Owner assigned", `${pr.title}: no owner proposed, ${owner} assigned`);
+    if (owner && owner !== pr.owner) log(pid, me(), "confirm", `Changed owner of "${pr.title}" from ${pr.owner || "no owner"} to ${owner}`);
+    if (!owner) continue;
+    made.push({ id: "o-" + pr.id, pid, stage: 3, title: pr.title, owner, due: pr.due, dueDay: 6, assignedBy: me(), fromPia: true });
+    if (!p.team.includes(owner)) p.team.push(owner);
+  }
+  S.extraTasks.push(...made);
+  const ws = confirmWrites("owners", p, run(pid), { tasks: made });
+  conf(pid).owners = { by: me(), writes: ws };
+  log(pid, me(), "confirm", `Confirmed task owners: ${made.map(t => t.owner + " (" + t.title + ")").join("; ") || "none"}`);
+  write(pid, "owners", ws);
+  if (pid === "hv") S.done.t2 = true;
+}
+function assignFlagCore(pid, prId, who) {
+  const pr = run(pid).proposals.find(x => x.id === prId); const p = pilot(pid);
+  (S.assigned[pid] = S.assigned[pid] || {})[prId] = who;
+  S.extraTasks.push({ id: "o-" + prId, pid, stage: 3, title: pr.title, owner: who, due: pr.due, dueDay: 6, assignedBy: me(), fromPia: true });
+  if (!p.team.includes(who)) p.team.push(who);
+  label(pid, "Owner assigned", `${pr.title}: no owner proposed, ${who} assigned`);
+  log(pid, me(), "confirm", `Assigned the flagged task "${pr.title}" to ${who}`);
+  write(pid, "assign", confirmWrites("assign", p, run(pid), { title: pr.title, owner: who }));
+}
+function slackText(pid) {
+  const r = run(pid); const kept = r.ideas.filter(i => i.status === "kept");
+  return `#pilot-${pid}-${pilot(pid).firm.split(" ")[0].toLowerCase()}: ${pilot(pid).firm} pilot plan agreed by ${conf(pid).ideas.by}. ${kept.length} use cases: ${kept.map(i => i.name).join("; ")}. ${r.questions.length} questions for the firm (${pilot(pid).ae}). Next: task owners and the first training invites.`;
+}
 
 // ---------- actions ----------
 const A = {
@@ -97,84 +173,90 @@ const A = {
     const p = pilot("hv"); if (p.stage !== "Proof of value") return;
     p.stage = "Pilot: design"; log("hv", "Salesforce", "start", "Stage changed from Proof of value to Pilot");
     toast("Salesforce: Harrow & Vale moved to Pilot. Pia started a run.");
-    if (canView(S.role, p)) go("pilots/hv/usecases");
-    startRun("hv", { trigger: "Deal reached pilot stage in Salesforce" });
+    if (canView(S.role, p)) go("pilots/hv/overview");
+    startRun("hv", { trigger: "Deal reached pilot stage in Salesforce", kind: "stage" });
   },
+  stageAgain() { log("hv", "Salesforce", "start", "Stage change sent again for Harrow & Vale"); startRun("hv", { trigger: "Deal reached pilot stage in Salesforce (sent again)", kind: "stage" }); },
   landCall() {
     if (S.g2Landed) return; S.g2Landed = true; const p = pilot("hv");
     log("hv", "Gong", "start", "New call landed: Follow-up call, 18 Nov 2026"); p.calls.push("g2");
-    if (S.approved.hv) { toast("New call landed after approval. Pia did not re-run; Tom was told."); log("hv", "PilotHQ", "check", "Pilot already approved, so no re-run. Legal Engineer notified."); render(); return; }
-    if (!run("hv") || run("hv").status !== "ready") { toast("Gong: follow-up call landed. Pia will read it on the next run."); render(); return; }
+    if (conf("hv").ideas) { toast("New call landed after Tom confirmed the ideas. Pia did not re-run; Tom was told."); log("hv", "PilotHQ", "check", "Ideas already confirmed, so no re-run. Legal Engineer notified."); render(); return; }
+    if (!run("hv") || run("hv").status !== "waiting") { toast("Gong: follow-up call landed. Pia will read it on the next run."); render(); return; }
     toast("Gong: follow-up call landed. Pia is re-running.");
-    startRun("hv", { trigger: "New call landed in Gong before approval (Follow-up call, 18 Nov)", merge: true });
+    startRun("hv", { trigger: "New call landed in Gong before the ideas were confirmed (Follow-up call, 18 Nov)", kind: "call", merge: true });
   },
-  reread(pid) { log(pid, me(), "start", "Asked Pia to re-read the calls"); startRun(pid, { trigger: "Re-read requested by " + me(), merge: true }); },
-  toggleModel() { S.modelDown = !S.modelDown; toast(S.modelDown ? "Model outage on: the next run will fail cleanly." : "Model back online."); render(); },
-  retry(pid) { log(pid, me(), "start", "Retry requested"); startRun(pid, { trigger: "Retry by " + me() }); },
+  reread(pid) { log(pid, me(), "start", "Asked Pia to re-read the calls"); startRun(pid, { trigger: "Re-read requested by " + me(), kind: "manual", merge: true }); },
+  toggleModel() { S.modelDown = !S.modelDown; toast(S.modelDown ? "Model outage on: the next run will stop cleanly." : "Model back online."); render(); },
+  retry(pid) { log(pid, me(), "start", "Retry requested"); startRun(pid, { trigger: "Retry by " + me(), kind: "manual" }); },
   reset() { const role = S.role; S = freshState(); S.role = role; seed(); go(LANDING[role]); toast("Started again."); },
   demo() { S.demoOpen = !S.demoOpen; render(); },
   pia() { S.piaOpen = !S.piaOpen; render(); },
   nav() { S.navOpen = !S.navOpen; render(); },
   person(n) { S.q = ""; S.panel = { kind: "person", name: n }; render(); },
   call(call, i) {
-    S.panel = { kind: "call", call, i }; const pid = S.r[0] === "pilots" ? S.r[1] : S.r[0] === "firms" ? S.r[1] : null;
+    S.panel = { kind: "call", call, i }; const pid = S.r[0] === "pilots" || S.r[0] === "firms" ? S.r[1] : null;
     if (pid) log(pid, me(), "read", `Viewed ${CALLS[call].source} ${CALLS[call].title.toLowerCase()}${i != null ? " at " + CALLS[call].lines[i].t : ""}`);
     render(); setTimeout(() => { const el = document.querySelector(".tline.hl"); if (el) el.scrollIntoView({ block: "center", behavior: "smooth" }); }, 30);
   },
-  uc(id) { S.panel = { kind: "uc", id }; render(); },
+  idea(id) { S.panel = { kind: "idea", id }; render(); },
   close() { S.panel = null; render(); },
-  setStatus(id, st) {
-    const pid = S.r[1]; const u = run(pid).useCases.find(x => x.id === id); const was = u.status; u.status = u.status === st ? "draft" : st;
-    log(pid, me(), "approval", `${u.status === "draft" ? "Reset" : st === "accepted" ? "Accepted" : "Rejected"} use case: ${u.title}`);
-    if (u.status === "rejected") toast("Use case rejected.", "", () => { u.status = was; });
+  decide(id, st) {
+    const pid = S.r[1]; const r = run(pid); const u = r.ideas.find(x => x.id === id); const was = { status: u.status, mergeInto: u.mergeInto };
+    u.status = u.status === st ? "open" : st; u.mergeInto = null;
+    if (u.status === "kept" && !u.name) u.name = u.text;
+    log(pid, me(), "edit", `${u.status === "open" ? "Reset" : st === "kept" ? "Kept" : "Dropped"} idea: ${u.topic}`);
+    if (u.status === "dropped") toast("Idea dropped.", "", () => Object.assign(u, was));
     render();
   },
-  editCrit(id, el) {
-    const pid = S.r[1]; const r = run(pid); const u = r.useCases.find(x => x.id === id); const v = el.value.trim();
-    if (v === (u.criterion ? u.criterion.text : "")) return;
-    u.criterion = { text: v, cite: u.criterion ? u.criterion.cite : null, editedBy: me() }; u.edited = true;
-    log(pid, me(), "edit", `Edited success criterion for "${u.title}": "${v}"`);
-    const g = r.gaps.find(x => x.id === "gap-" + id); if (g && v) { r.gaps = r.gaps.filter(x => x !== g); toast("Gap closed: success criterion added."); }
+  merge(id, el) {
+    const pid = S.r[1]; const r = run(pid); const u = r.ideas.find(x => x.id === id);
+    if (!el.value) { u.status = "open"; u.mergeInto = null; render(); return; }
+    const t = r.ideas.find(x => x.id === el.value); u.status = "merged"; u.mergeInto = t.id;
+    if (t.status !== "kept") { t.status = "kept"; if (!t.name) t.name = t.text; }
+    log(pid, me(), "edit", `Merged idea "${u.topic}" into "${t.topic}"`); render();
+  },
+  edit(id) { S.editing = S.editing === id ? null : id; render(); },
+  saveEdit(id, el) {
+    const pid = S.r[1]; const u = run(pid).ideas.find(x => x.id === id); const v = el.value.trim(); S.editing = null;
+    if (v && v !== u.text) { u.text = v; u.edited = true; log(pid, me(), "edit", `Edited idea "${u.topic}": "${v}"`); }
     render();
   },
-  answer(id, el) { const pid = S.r[1]; const g = run(pid).gaps.find(x => x.id === id); if (g.answer === el.value) return; g.answer = el.value; log(pid, me(), "edit", `Answered: ${g.text.slice(0, 60)}... -> "${el.value}"`); },
-  redraft(id) {
-    const pid = S.r[1]; const d = run(pid).dummy[id]; const p = pilot(pid);
-    log(pid, me(), "draft", "Asked Pia to redraft blocked dummy data");
-    d.docs = d.redraft || d.docs; d.hits = d.docs.flatMap(doc => dealFactScreen(doc.title + " " + doc.body, p)); d.status = d.hits.length ? "blocked" : "draft";
-    log(pid, "Pia (service account, deal team only)", "draft", "Redrafted dummy data with invented names");
-    log(pid, "PilotHQ checks (code)", "check", d.hits.length ? "Deal-fact screen blocked the redraft again" : "Deal-fact screen passed on the redraft");
-    toast(d.hits.length ? "Still blocked." : "Pia's redraft passed the deal-fact screen.", d.hits.length ? "bad" : "pia"); render();
+  name(id, el) { const pid = S.r[1]; const u = run(pid).ideas.find(x => x.id === id); u.name = el.value.trim(); log(pid, me(), "edit", `Named use case: "${u.name}"`); render(); },
+  confirmIdeas() { S.modal = { kind: "ideas" }; render(); },
+  doConfirmIdeas() { const pid = S.r[1]; confirmIdeasCore(pid); S.modal = { kind: "ideasDone" }; render(); },
+  pickOwner(pid, prId, el) { (S.pick[pid] = S.pick[pid] || {})[prId] = el.value || null; render(); },
+  confirmOwners(pid) { confirmOwnersCore(pid); toast(`Owners confirmed. Tasks are in each owner's My work.${openFlags(pid).length ? " " + openFlags(pid).length + " still has no owner." : ""}`); render(); },
+  assignFlag(pid, prId) { const who = (S.pick[pid] || {})[prId]; if (!who) { toast("Pick someone first.", "bad"); return; } assignFlagCore(pid, prId, who); toast(`${who} has the task.`); render(); },
+  ask(qid) { const pid = S.r[1]; const q = run(pid).questions.find(x => x.id === qid); q.asked = !q.asked; log(pid, me(), "confirm", `${q.asked ? "Marked asked" : "Marked not asked"}: ${q.text.slice(0, 70)}`); render(); },
+  answer(qid, el) { const pid = S.r[1]; const q = run(pid).questions.find(x => x.id === qid); if (q.answer === el.value) return; q.answer = el.value; log(pid, me(), "edit", `Firm's answer recorded: "${el.value}"`); toast("Answer saved. Tom sees it in Gaps."); render(); },
+  slot(key, i) { const pid = S.r[1]; (S.slot[pid] = S.slot[pid] || {})[key] = i; render(); },
+  copyInvite(key) { const pid = S.r[1]; const t = document.getElementById("invite-" + key).innerText; try { navigator.clipboard.writeText(t); } catch (e) {} log(pid, me(), "read", "Copied the drafted invite to send from their own calendar"); toast("Invite copied. Send it from your own calendar."); },
+  markSent(key) {
+    const pid = S.r[1]; const r = run(pid); (S.sent[pid] = S.sent[pid] || {})[key] = me();
+    const s = r.schedule.sessions.find(x => x.key === key); const sl = s.slots[(S.slot[pid] || {})[key] || 0];
+    log(pid, me(), "confirm", `Marked invite as sent from their own calendar: ${s.label}, ${sl.day} ${sl.date}`);
+    if (r.schedule.sessions.every(x => S.sent[pid][x.key])) S.done.t4 = true;
+    toast("Marked as sent."); render();
   },
-  editDoc(id, k, el) { const pid = S.r[1]; const d = run(pid).dummy[id]; const t = el.innerText.trim(); if (t === d.docs[k].body) return; d.docs[k].body = t; d.edited = true; d.hits = dealFactScreen(t, pilot(pid)); d.status = d.hits.length ? "blocked" : "draft"; log(pid, me(), "edit", "Edited dummy document: " + d.docs[k].title); render(); },
-  slot(i) { S.selectedSlot[S.r[1]] = i; render(); },
-  copyInvite() { const t = document.getElementById("invite").innerText; try { navigator.clipboard.writeText(t); } catch (e) {} log(S.r[1], me(), "send", "Copied the drafted invite to send from their own calendar"); if (S.role === "ae" && S.approved.hv) S.done.t4 = true; toast("Invite copied. Send it from your own calendar."); render(); },
-  note(el) { const v = el.value.trim(); if (!v) return; const pid = S.r[1]; S.notes[pid] = (S.notes[pid] || []).concat({ by: me(), text: v }); log(pid, me(), "edit", "Added context for Pia: " + v); toast("Saved. Pia reads this on the next run."); render(); },
-  approve() { S.modal = { kind: "approve" }; render(); },
+  task(id) { S.done[id] = !S.done[id]; const t = tasks().find(x => x.id === id); log(t.pid, me(), "confirm", `${S.done[id] ? "Completed" : "Reopened"} task: ${t.title}`); if (S.done[id]) toast("Task done.", "", () => { S.done[id] = false; }); render(); },
+  agenda() { S.modal = { kind: "agenda" }; log("hv", PIA_ACTOR, "draft", "Drafted the kickoff agenda from the agreed plan"); render(); },
   closeModal() { S.modal = null; render(); },
-  confirmApprove() {
-    const pid = S.r[1]; const p = pilot(pid); const r = run(pid); const lvl = editLevel(r);
-    log(pid, me(), "approval", `Approved the plan (${lvl.toLowerCase()})`);
-    r.useCases.forEach(u => { if (u.status === "draft") u.status = "accepted"; });
-    const writes = approvalWrites(p, r);
-    S.approved[pid] = { by: me(), level: lvl, writes }; S.done.t1 = true; S.done.t2 = true; p.stage = "Pilot: approved";
-    for (const w of writes) log(pid, "PilotHQ (after approval)", "write", `${w.target}: ${w.what}`);
-    S.modal = { kind: "approved" }; render();
-  },
-  task(id) { S.done[id] = !S.done[id]; const t = tasks().find(x => x.id === id); log(t.pid, me(), "edit", `${S.done[id] ? "Completed" : "Reopened"} task: ${t.title}`); if (S.done[id]) toast("Task done.", "", () => { S.done[id] = false; }); render(); },
-  agenda() { S.modal = { kind: "agenda" }; log("hv", "Pia (service account, deal team only)", "draft", "Drafted the kickoff agenda from the approved plan"); render(); },
   ap(id, verdict) {
     const it = approvals().find(x => x.id === id); if (!it) return; S.apDone[id] = verdict;
     if (verdict === "approved" && it.apply) it.apply();
-    log(it.pid, me(), "approval", `${verdict === "approved" ? "Approved" : "Rejected"}: ${it.text}`);
+    log(it.pid, me(), "confirm", `${verdict === "approved" ? "Approved" : "Rejected"}: ${it.text}`);
     if (id === "staff-cr") S.done.t10 = true;
     toast(verdict === "approved" ? "Approved." : "Rejected."); render();
   },
   apFilter(f) { S.apFilter = f; render(); },
   assign(pid, w) { S.modal = { kind: "assign", pid, w }; render(); },
-  confirmAssign(who) { const { pid, w } = S.modal; const c = capacity(pid)[w]; addCap(pid, w, c.need - c.staffed, who); S.modal = null; toast(`${who} assigned to ${pilot(pid).firm}.`); render(); },
+  confirmAssign(who) {
+    const { pid, w } = S.modal; const c = capacity(pid)[w]; const flags = w === 0 ? openFlags(pid) : [];
+    addCap(pid, w, c.need - c.staffed, who, flags.length > 0);
+    for (const f of flags) assignFlagCore(pid, f.id, who);
+    S.modal = null; toast(`${who} assigned to ${pilot(pid).firm}${flags.length ? ", with the flagged task" : ""}.`); render();
+  },
   priority(pid, el) { S.priority[pid] = el.value; log(pid, me(), "edit", "Priority set to " + el.value); toast("Priority updated."); },
-  libFilter(f) { S.libFilter = f; render(); },
   actFilter(f) { S.actFilter = f; render(); },
   digest(i) { S.modal = { kind: "digest", i }; render(); },
   search(el) { S.q = el.value; renderSearch(); },
@@ -186,17 +268,26 @@ const A = {
 
 function startRun(pid, opts) {
   const p = pilot(pid); const prev = run(pid);
-  let r = runPia(p, { trigger: opts.trigger, modelDown: S.modelDown });
-  if (opts.merge && prev && prev.status === "ready" && r.status === "ready") r = mergeRun(clone(prev), r);
+  let r = runPia(p, { trigger: opts.trigger, kind: opts.kind, now: S.clock, history: S.runs[pid] || [], modelDown: S.modelDown });
+  if (r.status === "skipped") {
+    S.skips.push({ pid, r }); for (const st of r.steps) { const a = stepAudit(pid, st); log(pid, a.actor, a.type, a.text); }
+    toast("Repeat trigger skipped: same deal and stage within 10 minutes."); render(); return;
+  }
+  if (opts.merge && prev && prev.status === "waiting" && r.status === "waiting") r = mergeRun(clone(prev), r);
   r.version = (S.runs[pid] || []).length + 1;
   S.runs[pid] = (S.runs[pid] || []).concat(r);
   S.anim = { pid, shown: 0 }; S.piaOpen = true; render();
   const t = setInterval(() => {
     const st = r.steps[S.anim.shown]; const a = stepAudit(pid, st); log(pid, a.actor, a.type, a.text);
     S.anim.shown++;
-    if (S.anim.shown >= r.steps.length) { clearInterval(t); S.anim = null; if (r.status === "ready") toast(r.changes && r.changes.length ? `Pia updated the draft: ${r.changes.length} changes.` : "Pia's draft is ready for review.", "pia"); if (r.status === "failed") toast("Run stopped cleanly. Nothing was written.", "bad"); }
+    if (S.anim.shown >= r.steps.length) {
+      clearInterval(t); S.anim = null;
+      if (r.status === "waiting") toast(r.changes && r.changes.length ? `Pia updated the ideas: ${r.changes.length} changes.` : "Pia's ideas and proposals are ready for people to decide.", "pia");
+      if (r.status === "failed") toast("Run stopped cleanly. Nothing was written.", "bad");
+      if (r.status === "stopped") toast("Stopped at the step limit. Nothing was written.", "bad");
+    }
     render();
-  }, 480);
+  }, 420);
 }
 
 // ---------- routing ----------
@@ -222,12 +313,11 @@ function pl(n, withAv = false) {
   return `<a class="ent hasprev" onclick="A.person('${jq(n)}')">${withAv ? av(n, "sm") + " " : ""}${esc(n)}<span class="prev">${av(n)}<span><b>${esc(n)}</b><br><span class="small muted">${esc(p.title)} · ${esc(p.city)}</span></span></span></a>`;
 }
 function fl(pid) { const p = pilot(pid); if (!canView(S.role, p)) return esc(p.firm); return `<a class="ent" onclick="go('firms/${pid}')">${esc(p.firm)}</a>`; }
-function pilotLink(pid, label) { return `<a class="ent" onclick="go('pilots/${pid}/overview')">${esc(label || pilot(pid).firm)}</a>`; }
-function libLink(id) { return `<a class="ent" onclick="go('library/${id}')">${id}</a>`; }
-function practiceLink(pr) { return `<a class="ent subtle" onclick="S.libFilter='${jq(pr)}';go('library')">${esc(pr)}</a>`; }
+function pilotLink(pid, lbl) { return `<a class="ent" onclick="go('pilots/${pid}/overview')">${esc(lbl || pilot(pid).firm)}</a>`; }
 function chip(t, k = "") { return `<span class="chip ${k}">${t}</span>`; }
 const PIA = `<span class="spark" aria-hidden="true">✦</span>`;
-function piaBtn(label, on, extra = "") { return `<button class="btn pia" ${extra} onclick="${on}">${PIA} ${esc(label)}</button>`; }
+function piaBtn(lbl, on, extra = "") { return `<button class="btn pia" ${extra} onclick="${on}">${PIA} ${esc(lbl)}</button>`; }
+function decided() { return chip(PIA + " Pia · Decided", "pia"); }
 function riskChip(r) { return chip((r === "High" ? "▲ " : r === "Medium" ? "● " : "✓ ") + r, r === "High" ? "red" : r === "Medium" ? "warn" : "green"); }
 function progressBar(pid) { const s = stageOf(pid); const pct = Math.round(s / (STAGES.length - 1) * 100); return `<div class="pbar" role="progressbar" aria-valuenow="${s + 1}" aria-valuemax="${STAGES.length}"><span style="width:${Math.max(pct, 4)}%"></span></div><div class="small muted">${esc(STAGES[s])} · ${s + 1} of ${STAGES.length}</div>`; }
 
@@ -246,7 +336,7 @@ function header() {
     <div class="top-l"><button class="icon menu" aria-label="Menu" onclick="A.nav()">☰</button><a class="brand" onclick="go('${LANDING[S.role]}')">Pilot<span>HQ</span></a>
       <nav class="tabsnav ${S.navOpen ? "open" : ""}" aria-label="Main">${nav.map(([k, l]) => `<a class="${cur === k ? "on" : ""}" onclick="go('${k}')">${l}${k === "approvals" && ap ? ` <span class="badge">${ap}</span>` : ""}</a>`).join("")}</nav></div>
     <div class="top-r">
-      <div class="search"><input id="q" placeholder="Search" value="${esc(S.q)}" oninput="A.search(this)" aria-label="Search pilots, people and library"><div id="sres"></div></div>
+      <div class="search"><input id="q" placeholder="Search" value="${esc(S.q)}" oninput="A.search(this)" aria-label="Search pilots and people"><div id="sres"></div></div>
       <button class="icon bell" aria-label="Notifications" onclick="go('${ap ? "approvals" : LANDING[S.role]}')">🔔${ap ? `<span class="dotn">${ap}</span>` : ""}</button>
       <label class="who">${av(me(), "sm")}<select aria-label="Switch role" onchange="A.role(this.value)">${Object.entries(ROLES).map(([k, v]) => `<option value="${k}" ${k === S.role ? "selected" : ""}>${esc(v.name)} · ${esc(v.label)}</option>`).join("")}</select></label>
     </div></header>`;
@@ -256,8 +346,7 @@ function renderSearch() {
   const q = S.q.trim().toLowerCase(); if (q.length < 2) { box.innerHTML = ""; return; }
   const ps = S.pilots.filter(p => canView(S.role, p) && p.firm.toLowerCase().includes(q)).map(p => `<a onclick="S.q='';go('pilots/${p.id}/overview')"><span class="chip">Pilot</span> ${esc(p.firm)}</a>`);
   const pe = visiblePeople().filter(p => p.name.toLowerCase().includes(q)).map(p => `<a onclick="A.person('${jq(p.name)}')"><span class="chip">Person</span> ${esc(p.name)}</a>`);
-  const li = LIBRARY.filter(e => (e.id + " " + e.useCase + " " + e.summary).toLowerCase().includes(q)).map(e => `<a onclick="S.q='';go('library/${e.id}')"><span class="chip">Library</span> ${esc(e.useCase)}</a>`);
-  const all = [...ps, ...pe, ...li].slice(0, 8);
+  const all = [...ps, ...pe].slice(0, 8);
   box.innerHTML = `<div class="sres">${all.join("") || `<span class="small muted">No results</span>`}</div>`;
 }
 
@@ -267,7 +356,6 @@ function main() {
   if (a === "approvals") return approvalsView();
   if (a === "pilots" && b) return pilotView(b, c || "overview");
   if (a === "pilots") return S.role === "esm" ? portfolioView() : pilotsView();
-  if (a === "library") return b ? libEntryView(b) : libraryView();
   if (a === "people") return peopleView();
   if (a === "firms") return firmView(b);
   if (a === "quality") return qualityView(b || "checks");
@@ -280,11 +368,11 @@ function workView() {
   const groups = [["Today", t => !S.done[t.id] && t.dueDay <= 0], ["This week", t => !S.done[t.id] && t.dueDay > 0 && t.dueDay <= 4], ["Later", t => !S.done[t.id] && t.dueDay > 4], ["Done", t => S.done[t.id]]];
   const ap = (S.role === "le" || S.role === "esm") ? approvals() : [];
   const recent = S.audit.filter(e => e.actor.startsWith("Pia") && e.pid && canView(S.role, pilot(e.pid))).slice(-5).reverse();
-  return `<div class="ph"><div><div class="eyebrow">My work</div><h1>Good morning, ${esc(me().split(" ")[0])}</h1><p class="muted">${mine.filter(t => !S.done[t.id]).length} open tasks${ap.length ? ` · ${ap.length} waiting for your approval` : ""}</p></div></div>
+  return `<div class="ph"><div><div class="eyebrow">My work</div><h1>Good morning, ${esc(me().split(" ")[0])}</h1><p class="muted">${mine.filter(t => !S.done[t.id]).length} open tasks${ap.length ? ` · ${ap.length} waiting for your decision` : ""}</p></div></div>
   <div class="grid2 wide-l">
     <section>${groups.map(([g, f]) => { const ts = mine.filter(f); if (!ts.length && g !== "Today") return ""; return `<h3 class="sect">${g} <span class="count">${ts.length}</span></h3><div class="card flush">${ts.map(taskRow).join("") || `<div class="empty-s">Nothing due today.</div>`}</div>`; }).join("")}</section>
     <aside>
-      ${ap.length ? `<h3 class="sect">Waiting for you</h3><div class="card flush">${ap.map(i => `<div class="row-i ${i.pia ? "pia-l" : ""}"><div>${i.pia ? chip(PIA + " Pia", "pia") : chip(i.type)} <b>${i.pid ? esc(pilot(i.pid).firm) : "Pilot Library"}</b><div class="small">${esc(i.text)}</div></div><a class="ent small" onclick="go('${i.review || "approvals"}')">Open</a></div>`).join("")}</div>` : ""}
+      ${ap.length ? `<h3 class="sect">Waiting for you</h3><div class="card flush">${ap.map(i => `<div class="row-i ${i.pia ? "pia-l" : ""}"><div>${i.pia ? chip(PIA + " Pia", "pia") : chip(i.type)} <b>${esc(pilot(i.pid).firm)}</b><div class="small">${esc(i.text)}</div></div><a class="ent small" onclick="go('${i.review || "approvals"}')">Open</a></div>`).join("")}</div>` : ""}
       <h3 class="sect">Recent Pia activity</h3><div class="card flush">${recent.map(e => `<div class="row-i pia-l"><div><div class="small muted">${e.at} · ${esc(pilot(e.pid).firm)}</div><div class="small">${esc(e.text)}</div></div></div>`).join("") || `<div class="empty-s">Pia hasn't run on your pilots today.</div>`}</div>
     </aside></div>`;
 }
@@ -293,20 +381,32 @@ function taskRow(t) {
   const open = t.route ? `go('${t.route}')` : t.tab ? `go('pilots/${t.pid}/${t.tab}')` : t.pid ? `go('pilots/${t.pid}/progress')` : "";
   const canTick = t.owner === me();
   return `<div class="task ${done ? "done" : ""}"><input type="checkbox" class="tick" ${done ? "checked" : ""} ${canTick ? "" : "disabled"} onchange="A.task('${t.id}')" aria-label="Mark done: ${esc(t.title)}">
-    <div class="grow"><a class="ent" onclick="${open}">${esc(t.title)}</a><div class="small muted">${p ? pilotLink(p.id) + " · " : ""}Due ${esc(t.due)}${t.assignedBy ? " · assigned by " + pl(t.assignedBy) : ""}</div></div>
-    ${t.pia && !done ? piaBtn("Draft it", "A.agenda()") : ""}${pl(t.owner) === esc(t.owner) ? "" : `<span title="${esc(t.owner)}">${av(t.owner, "sm")}</span>`}</div>`;
+    <div class="grow"><a class="ent" onclick="${open}">${esc(t.title)}</a><div class="small muted">${p ? pilotLink(p.id) + " · " : ""}Due ${esc(t.due)}${t.assignedBy ? " · assigned by " + pl(t.assignedBy) : ""}${t.fromPia ? " · owner proposed by Pia" : ""}</div></div>
+    ${t.pia && !done ? piaBtn("Draft it", "A.agenda()") : ""}${PERSON[t.owner] ? `<span title="${esc(t.owner)}">${av(t.owner, "sm")}</span>` : ""}</div>`;
 }
 
 // ---------- Approvals ----------
+function ownerSelect(pid, pr, current) {
+  return `<select aria-label="Owner for ${esc(pr.title)}" onchange="A.pickOwner('${pid}','${pr.id}',this)"><option value="">No owner</option>${lesFree().map(x => `<option value="${esc(x.name)}" ${current === x.name ? "selected" : ""}>${esc(x.name)} · ${x.free} h free${x.specialities.includes(pr.practice) ? " · " + esc(pr.practice) : ""}</option>`).join("")}</select>`;
+}
+function ownersBlock(pid) {
+  const list = liveProposals(pid); const done = !!conf(pid).owners; const can = S.role === "esm" && !done;
+  return `<table class="tbl"><thead><tr><th>Task</th><th>Pia proposed</th><th>Owner</th></tr></thead><tbody>${list.map(pr => { const cur = ownerOf(pid, pr) || (S.assigned[pid] || {})[pr.id] || null; return `<tr><td><b>${esc(pr.title)}</b><div class="small muted">Due ${esc(pr.due)}, ${esc(pr.dueNote)} · ${pr.hours} h</div></td>
+    <td>${pr.owner ? `${pl(pr.owner)}<div class="small muted">${esc(pr.reason)}</div>` : `${chip("▲ No owner", "warn")}<div class="small">${esc(pr.flag)}</div><div class="small muted">${esc(pr.reason)}</div>`}</td>
+    <td>${can || (S.role === "esm" && !cur) ? ownerSelect(pid, pr, cur) + (done && !cur ? ` <button class="btn small primary" onclick="A.assignFlag('${pid}','${pr.id}')">Assign</button>` : "") : cur ? `${pl(cur)}${cur !== pr.owner ? ` <span class="small muted">(changed)</span>` : ""}` : `<span class="small muted">Waiting for ${esc(ROLES.esm.name)}</span>`}</td></tr>`; }).join("")}</tbody></table>`;
+}
 function approvalsView() {
   const f = S.apFilter;
-  const items = approvals().filter(i => f === "All" || (f === "Drafted by Pia" && i.pia) || (f === "Staffing" && i.type === "Staffing") || (f === "Library" && i.type === "Library entry"));
-  return `<div class="ph"><div><div class="eyebrow">Approvals</div><h1>Waiting for your decision</h1><p class="muted">Nothing Pia drafts is saved until a person approves it.</p></div></div>
-  <div class="filters">${["All", "Drafted by Pia", "Staffing", "Library"].map(x => `<button class="fchip ${f === x ? "on" : ""}" onclick="A.apFilter('${x}')">${x}</button>`).join("")}</div>
-  <div class="card flush">${items.map(i => `<div class="appr ${i.pia ? "pia-l" : ""}">
-     <div class="grow"><div class="row">${i.pia ? chip(PIA + " Drafted by Pia", "pia") : chip("Requested by " + (i.type === "Staffing" ? "PilotHQ capacity check" : "team"))}<span class="small muted">${esc(i.type)} · ${esc(i.age)}</span></div>
-       <div class="mt4"><b>${i.pid ? fl(i.pid) : "Pilot Library"}</b></div><div>${esc(i.text)}</div></div>
-     <div class="row">${i.review ? `<button class="btn primary" onclick="go('${i.review}')">Review</button>` : `<button class="btn" onclick="A.ap('${i.id}','rejected')">Reject</button><button class="btn primary" onclick="A.ap('${i.id}','approved')">Approve</button>`}</div></div>`).join("") || `<div class="empty"><h3>Nothing waiting for you</h3><p class="muted">New drafts from Pia and staffing requests appear here.</p></div>`}</div>`;
+  const items = approvals().filter(i => f === "All" || (f === "Pia proposals" && i.pia) || (f === "Staffing" && i.type === "Staffing"));
+  return `<div class="ph"><div><div class="eyebrow">Approvals</div><h1>Waiting for your decision</h1><p class="muted">Pia proposes. Nothing is written until you confirm your part.</p></div></div>
+  <div class="filters">${["All", "Pia proposals", "Staffing"].map(x => `<button class="fchip ${f === x ? "on" : ""}" onclick="A.apFilter('${x}')">${x}</button>`).join("")}</div>
+  ${items.map(i => {
+    if (i.kind === "owners") return `<div class="card flush pia-card"><div class="appr"><div class="grow"><div class="row">${chip(PIA + " Proposed by Pia", "pia")}<span class="small muted">${esc(i.type)} · ${esc(i.age)}</span></div><div class="mt4"><b>${fl(i.pid)}</b></div><div class="small muted">Matched on specialities, then most free hours this week. Change any owner before you confirm.</div></div><button class="btn primary" onclick="A.confirmOwners('${i.pid}')">Confirm owners</button></div>${ownersBlock(i.pid)}</div>`;
+    if (i.kind === "flag") return `<div class="card pia-card"><div class="row between"><div>${chip("▲ No owner", "warn")} <b>${fl(i.pid)}</b><div>${esc(i.prop.title)}</div><div class="small muted">${esc(i.prop.flag)}. ${esc(i.prop.reason)}.</div></div><div class="row">${ownerSelect(i.pid, i.prop, (S.pick[i.pid] || {})[i.prop.id])}<button class="btn primary" onclick="A.assignFlag('${i.pid}','${i.prop.id}')">Assign</button></div></div><p class="small muted">Or click the short week for ${esc(pilot(i.pid).firm)} in the <a class="ent" onclick="go('pilots')">capacity grid</a>.</p></div>`;
+    return `<div class="card flush"><div class="appr ${i.pia ? "pia-l" : ""}"><div class="grow"><div class="row">${i.pia ? chip(PIA + " From Pia", "pia") : chip("Requested by PilotHQ capacity check")}<span class="small muted">${esc(i.type)} · ${esc(i.age)}</span></div>
+       <div class="mt4"><b>${fl(i.pid)}</b></div><div>${esc(i.text)}</div></div>
+     <div class="row">${i.review ? `<button class="btn primary" onclick="go('${i.review}')">Review</button>` : `<button class="btn" onclick="A.ap('${i.id}','rejected')">Reject</button><button class="btn primary" onclick="A.ap('${i.id}','approved')">Approve</button>`}</div></div></div>`;
+  }).join("") || `<div class="card empty"><h3>Nothing waiting for you</h3><p class="muted">Pia's proposals and staffing requests appear here.</p></div>`}`;
 }
 
 // ---------- Pilots list ----------
@@ -336,20 +436,20 @@ function portfolioView() {
   <div class="card flush"><table class="tbl"><thead><tr><th>Firm</th><th>Progress</th><th>Next step</th><th>Criteria</th><th>Risk</th><th>Priority</th></tr></thead><tbody>
   ${all.map(p => { const [r, why] = riskOf(p); return `<tr><td><a class="ent" onclick="go('pilots/${p.id}/overview')"><b>${esc(p.firm)}</b></a><div class="small muted">${esc(p.region)} · AE ${pl(p.ae)}</div></td><td style="min-width:150px">${progressBar(p.id)}</td><td class="small">${esc(nextStep(p))}</td><td class="small">${esc(criteriaSummary(p))}</td><td>${riskChip(r)}<div class="small muted">${esc(why)}</div></td><td><select aria-label="Priority for ${esc(p.firm)}" onchange="A.priority('${p.id}',this)">${["Normal", "High", "Low"].map(o => `<option ${S.priority[p.id] === o ? "selected" : ""}>${o}</option>`).join("")}</select></td></tr>`; }).join("")}
   </tbody></table></div>
-  <h3 class="sect">Capacity coming up</h3><p class="small muted">Legal Engineer hours staffed of needed, per pilot. Hover for what drives the need; click a short week to assign someone.</p>
+  <h3 class="sect">Capacity coming up</h3><p class="small muted">Legal Engineer hours staffed of needed, per pilot. Hover for what drives the need; click a short week to assign someone. A ▲ marks a task Pia couldn't find an owner for.</p>
   <div class="card flush"><table class="tbl cap"><thead><tr><th>Pilot</th>${WEEKS.map(w => `<th>${w}</th>`).join("")}</tr></thead><tbody>
-  ${all.map(p => `<tr><td><a class="ent" onclick="go('pilots/${p.id}/overview')">${esc(p.firm)}</a></td>${capacity(p.id).map((c, w) => { const short = c.need - c.staffed; const cls = c.need === 0 ? "none" : short <= 0 ? "ok" : short > c.need / 2 ? "bad" : "short"; return `<td><button class="cell ${cls}" title="${esc(c.driver)}" ${short > 0 ? `onclick="A.assign('${p.id}',${w})"` : "disabled"}><b>${c.staffed}/${c.need}</b><span>${short > 0 ? "short " + short : c.need ? "covered" : "none"}</span></button></td>`; }).join("")}</tr>`).join("")}
+  ${all.map(p => { const flags = openFlags(p.id).length; return `<tr><td><a class="ent" onclick="go('pilots/${p.id}/overview')">${esc(p.firm)}</a>${flags ? `<div class="small">${chip("▲ " + flags + " no owner", "warn")}</div>` : ""}</td>${capacity(p.id).map((c, w) => { const short = c.need - c.staffed; const flagHere = w === 0 && flags; const cls = c.need === 0 ? "none" : short <= 0 ? "ok" : short > c.need / 2 ? "bad" : "short"; return `<td><button class="cell ${cls}" title="${esc(c.driver)}${flagHere ? ". Includes a task with no owner." : ""}" ${short > 0 ? `onclick="A.assign('${p.id}',${w})"` : "disabled"}><b>${c.staffed}/${c.need}${flagHere ? " ▲" : ""}</b><span>${short > 0 ? "short " + short : c.need ? "covered" : "none"}</span></button></td>`; }).join("")}</tr>`; }).join("")}
   <tr class="tot"><td>Total short</td>${WEEKS.map((w, i) => `<td>${all.reduce((a, p) => a + Math.max(0, capacity(p.id)[i].need - capacity(p.id)[i].staffed), 0)} h</td>`).join("")}</tr>
   </tbody></table></div></section>
   <aside><h3 class="sect">My tasks</h3><div class="card flush">${myTasks.map(taskRow).join("") || `<div class="empty-s">All done.</div>`}</div>
-  <h3 class="sect">Waiting for approval</h3><div class="card flush">${approvals().map(i => `<div class="row-i"><div class="small">${esc(i.text)}</div><button class="btn small primary" onclick="A.ap('${i.id}','approved')">Approve</button></div>`).join("") || `<div class="empty-s">Nothing waiting.</div>`}</div></aside></div>`;
+  <h3 class="sect">Waiting for you</h3><div class="card flush">${approvals().map(i => `<div class="row-i ${i.pia ? "pia-l" : ""}"><div class="small"><b>${esc(pilot(i.pid).firm)}</b> · ${esc(i.text)}</div><button class="btn small" onclick="go('approvals')">Open</button></div>`).join("") || `<div class="empty-s">Nothing waiting.</div>`}</div></aside></div>`;
 }
 function criteriaSummary(p) {
   const pr = PROGRESS[p.id];
   if (pr.criteria) return `${pr.criteria.filter(c => !/^Not agreed/.test(c[0])).length} of ${pr.criteria.length} agreed`;
-  const r = run(p.id); if (!r || r.status !== "ready") return "None yet";
-  const k = r.useCases.filter(u => u.status !== "rejected");
-  return S.approved[p.id] ? `${k.filter(u => u.criterion && u.criterion.text).length} of ${k.length} agreed` : `${k.filter(u => u.criterion).length} drafted by Pia`;
+  if (!conf(p.id).ideas) return "None yet";
+  const k = run(p.id).ideas.filter(u => u.status === "kept");
+  return `0 of ${k.length} agreed · ${k.filter(u => u.successQuote).length} with the firm's words`;
 }
 
 // ---------- Pilot workspace ----------
@@ -357,13 +457,15 @@ function pilotView(pid, tab) {
   const p = pilot(pid);
   if (!p) return `<div class="empty card"><h3>Pilot not found</h3></div>`;
   if (!canView(S.role, p)) return `<div class="empty card"><h2>You don't have access to this pilot</h2><p class="muted">${esc(me())} is not on the deal team, so PilotHQ shows nothing about it. Pia's service account only reads the deal team's records. This attempt is in the activity log.</p><button class="btn" onclick="go('${LANDING[S.role]}')">Back</button></div>`;
-  const r = run(pid); const anim = S.anim && S.anim.pid === pid;
-  const blocked = r && r.status === "ready" ? Object.values(r.dummy).filter(d => d.status === "blocked").length : 0;
+  const r = run(pid); const anim = S.anim && S.anim.pid === pid; const ok = ready(pid);
   let action = "";
-  if (S.approved[pid]) action = chip("✓ Approved by " + esc(S.approved[pid].by), "green big");
-  else if (S.role === "le" && r && r.status === "ready" && !anim) action = `<button class="btn primary big" ${blocked ? "disabled" : ""} onclick="A.approve()">Approve plan</button>${blocked ? `<div class="small badc">Resolve ${blocked} blocked draft first</div>` : ""}`;
-  else if (r && r.status === "ready" && !anim) action = `<span class="small muted">Waiting for ${pl(p.les[0])} to approve</span>`;
-  const count = k => { if (k === "progress") { const n = tasks().filter(t => t.pid === pid && !S.done[t.id] && t.stage === stageOf(pid)).length; return n || ""; } if (!r || r.status !== "ready") return ""; if (k === "usecases") return r.useCases.length; if (k === "gaps") return r.gaps.length || ""; if (k === "dummy") return blocked ? `<span class="badge">${blocked}</span>` : ""; return ""; };
+  if (conf(pid).ideas) action = chip("✓ Plan agreed by " + esc(conf(pid).ideas.by), "green big");
+  else if (ok && me() === p.les[0]) { const prob = ideasProblem(r); action = `<button class="btn primary big" ${prob ? "disabled" : ""} onclick="A.confirmIdeas()">Confirm ideas</button>${prob ? `<div class="small muted">${esc(prob)}</div>` : ""}`; }
+  else if (ok) action = `<span class="small muted">Waiting for ${pl(p.les[0])} to confirm the ideas</span>`;
+  const count = k => {
+    if (k === "progress") { const n = tasks().filter(t => t.pid === pid && !S.done[t.id] && t.stage === stageOf(pid)).length; return n || ""; }
+    if (!ok) return ""; if (k === "ideas") return r.ideas.length; if (k === "gaps") return r.questions.filter(q => !q.answer).length || ""; if (k === "schedule") return r.schedule ? r.schedule.sessions.length : ""; return "";
+  };
   const tabName = (PILOT_TABS.find(t => t[0] === tab) || [0, "Overview"])[1];
   const showPia = S.piaOpen && !p.static;
   return `<div class="crumbs"><a class="ent subtle" onclick="go('pilots')">${S.role === "esm" ? "Portfolio" : "Pilots"}</a> / ${fl(pid)} / <span class="muted">${tabName}</span></div>
@@ -372,7 +474,7 @@ function pilotView(pid, tab) {
     <div class="actions">${action}${p.static ? "" : `<button class="btn pia ghost" onclick="A.pia()" aria-expanded="${S.piaOpen}">${PIA} ${S.piaOpen ? "Hide" : "Show"} Pia</button>`}</div></div>
   ${anim ? `<div class="piabar" aria-label="Pia is working"><span></span></div>` : ""}
   <nav class="ptabs" role="tablist">${PILOT_TABS.map(([k, l]) => `<a role="tab" tabindex="0" aria-selected="${tab === k}" class="${tab === k ? "on" : ""}" onclick="go('pilots/${pid}/${k}')" onkeydown="if(event.key==='Enter')go('pilots/${pid}/${k}')">${l}${count(k) !== "" ? ` <span class="count">${count(k)}</span>` : ""}</a>`).join("")}</nav>
-  ${r && r.changes && r.changes.length && !anim && !S.approved[pid] ? `<div class="banner pia-b">${PIA} <b>Pia updated the draft after the follow-up call.</b> Your edits were kept. ${r.changes.map(esc).join(" · ")}</div>` : ""}
+  ${ok && r.changes && r.changes.length && !conf(pid).ideas ? `<div class="banner pia-b">${PIA} <b>Pia re-read the calls after the follow-up call.</b> Your decisions and edits were kept. ${r.changes.map(esc).join(" · ")}</div>` : ""}
   <div class="work ${showPia ? "with-pia" : ""}"><section class="tabbody">${tabBody(p, r, anim, tab)}</section>${showPia ? `<aside class="piapanel">${piaPanel(p, r, anim)}</aside>` : ""}</div>`;
 }
 
@@ -381,51 +483,63 @@ function tabBody(p, r, anim, tab) {
   if (tab === "progress") return progressTab(p);
   if (tab === "team") return teamTab(p);
   if (tab === "activity") return activityTab(p);
-  if (p.static) return `<div class="empty card"><h3>Planned by hand</h3><p class="muted">This pilot was set up before Pia. See Progress and Team.</p></div>`;
-  if (anim) return `<div class="card">${[1, 2, 3, 4].map(() => `<div class="skel"></div>`).join("")}<p class="small muted">${PIA} Pia is reading and drafting. Nothing shows until the source check and deal-fact screen have run.</p></div>`;
-  if (!r) return `<div class="empty card"><h3>Nothing drafted yet</h3><p class="muted">Pia drafts the plan when the deal reaches pilot stage in Salesforce.</p></div>`;
+  if (p.static) return `<div class="empty card"><h3>Set up by hand</h3><p class="muted">This pilot was set up before Pia. See Progress and Team.</p></div>`;
+  if (anim) return `<div class="card">${[1, 2, 3, 4].map(() => `<div class="skel"></div>`).join("")}<p class="small muted">${PIA} Pia is reading the calls. Nothing shows until the source check has run.</p></div>`;
+  const st = runStatusCard(r); if (st) return st;
+  if (tab === "ideas") return ideasTab(p, r);
+  if (tab === "gaps") return gapsTab(p, r);
+  if (tab === "schedule") return scheduleTab(p, r);
+  return "";
+}
+function runStatusCard(r) {
+  if (!r) return `<div class="empty card"><h3>Nothing from Pia yet</h3><p class="muted">Pia reads the calls when the deal reaches pilot stage in Salesforce.</p></div>`;
   if (r.status === "nothing") return `<div class="empty card"><h3>Nothing to read</h3><p class="muted">This pilot has no recorded calls Pia is allowed to read, so Pia drafted nothing rather than guessing.</p></div>`;
   if (r.status === "failed") return `<div class="empty card"><h3>Pia's run stopped</h3><p class="muted">The model did not respond. Nothing was half-written. ${S.role === "le" ? "Try again from the Pia panel." : "The Legal Engineer has been told to retry."}</p></div>`;
-  if (tab === "usecases") return useCasesTab(p, r);
-  if (tab === "gaps") return gapsTab(p, r);
-  if (tab === "dummy") return dummyTab(p, r);
-  if (tab === "schedule") return scheduleTab(p, r);
+  if (r.status === "ambiguous") return `<div class="empty card"><h3>Which deal is this pilot for?</h3><p class="muted">The firm has more than one open deal, so Pia stopped and drafted nothing. The Account Executive has been asked.</p></div>`;
+  if (r.status === "stopped") return `<div class="empty card"><h3>Stopped at the step limit</h3><p class="muted">Pia used all ${r.maxSteps} tool steps and stopped cleanly. What was drafted is kept in the Pia panel. Nothing was written.</p></div>`;
   return "";
 }
 
 function overviewTab(p, r) {
-  const pr = PROGRESS[p.id]; const s = stageOf(p.id); const f = FIRMS[p.id];
-  const kept = r && r.status === "ready" ? r.useCases.filter(u => u.status !== "rejected") : [];
+  const pr = PROGRESS[p.id]; const s = stageOf(p.id); const f = FIRMS[p.id]; const ok = ready(p.id);
+  const kept = ok && conf(p.id).ideas ? r.ideas.filter(u => u.status === "kept") : [];
   const next = tasks().filter(t => t.pid === p.id && !S.done[t.id]).slice(0, 4);
-  const gaps = r && r.status === "ready" ? r.gaps.length : 0;
+  const qs = ok ? r.questions : [];
+  const isAE = me() === p.ae;
   return `<div class="ov">
    <div class="card"><div class="lbl">How it's tracking</div>${miniStepper(p.id)}
-     <div class="kv"><span>Stage</span><b>${esc(STAGES[s])}</b><span>Days left</span><b>${pr.daysLeft}</b><span>Firm decides</span><b>${esc(pr.decision)}</b><span>Success criteria</span><b>${esc(criteriaSummary(p))}</b><span>Open gaps</span><b>${gaps ? `<a class="ent" onclick="go('pilots/${p.id}/gaps')">${gaps}</a>` : "0"}</b><span>Risk</span><b>${riskChip(riskOf(p)[0])}</b></div>
+     <div class="kv"><span>Stage</span><b>${esc(STAGES[s])}</b><span>Days left</span><b>${pr.daysLeft}</b><span>Firm decides</span><b>${esc(pr.decision)}</b><span>Success criteria</span><b>${esc(criteriaSummary(p))}</b><span>Questions for the firm</span><b>${qs.length ? `${qs.filter(q => q.asked).length} of ${qs.length} asked` : "0"}</b><span>Risk</span><b>${riskChip(riskOf(p)[0])}</b></div>
      <a class="ent small" onclick="go('pilots/${p.id}/progress')">Progress and checklist →</a></div>
    <div class="card"><div class="lbl">Firm</div><h3>${fl(p.id)}</h3><p class="small">${esc(f.about)}</p>
      <div class="kv"><span>HQ</span><b>${esc(f.hq)}</b><span>Offices</span><b>${f.offices.map(esc).join(", ")}</b><span>Lawyers</span><b>${f.lawyers}</b><span>Pilot</span><b>${p.users} users · ${p.days} days</b>${(S.role === "ae" || S.role === "esm") && p.salesforce ? `<span>Deal</span><b>${esc(p.salesforce.amount)}</b>` : ""}</div></div>
-   <div class="card ${!p.static && kept.length && !S.approved[p.id] ? "pia-card" : ""}"><div class="row between"><div class="lbl">What's agreed</div>${!p.static && kept.length ? draftTag(p.id) : ""}</div>${p.static ? (pr.criteria || []).map(c => `<p class="small">• ${esc(c[0])}</p>`).join("") : kept.length ? `<ul class="plain">${kept.map(u => `<li><a class="ent" onclick="A.uc('${u.id}')">${esc(u.title)}</a><div class="small muted">${practiceLink(u.practice)} · ${u.criterion && u.criterion.text ? esc(u.criterion.text) : "success criterion to agree"}</div></li>`).join("")}</ul>` : `<p class="small muted">Nothing agreed yet.</p>`}</div>
-   <div class="card"><div class="lbl">What's next</div>${next.map(t => `<div class="row-i nb"><a class="ent small" onclick="go('pilots/${p.id}/progress')">${esc(t.title)}</a><span class="row small muted nowrap">${esc(t.due)} ${av(t.owner, "sm")}</span></div>`).join("") || `<p class="small muted">No open tasks.</p>`}
-     ${S.role === "ae" && !p.static ? `<div class="lbl mt12">Add context for Pia</div><textarea id="note" rows="2" placeholder="e.g. The firm's champion moves to Singapore in December."></textarea><button class="btn small mt4" onclick="A.note(document.getElementById('note'))">Save</button>${(S.notes[p.id] || []).map(n => `<p class="small">• ${esc(n.text)}</p>`).join("")}` : ""}</div>
+   <div class="card"><div class="row between"><div class="lbl">What's agreed</div>${kept.length ? chip("✓ Agreed by " + esc(conf(p.id).ideas.by), "green") : ""}</div>${p.static ? (pr.criteria || []).map(c => `<p class="small">• ${esc(c[0])}</p>`).join("") : kept.length ? `<ul class="plain">${kept.map(u => `<li><a class="ent" onclick="A.idea('${u.id}')">${esc(u.name)}</a><div class="small muted">${esc(u.practice)} · ${u.successQuote ? "the firm said: “" + esc(u.successQuote.quote) + "”" : "success measure to agree with the firm"}</div></li>`).join("")}</ul>` : ok ? `<p class="small">${r.ideas.length} ideas from the calls are waiting for ${pl(p.les[0])}.</p><a class="ent small" onclick="go('pilots/${p.id}/ideas')">See the ideas →</a>` : `<p class="small muted">Nothing agreed yet.</p>`}</div>
+   <div class="card ${qs.length ? "pia-card" : ""}"><div class="row between"><div class="lbl">Questions for the firm</div>${qs.length ? chip(PIA + " Pia looked first", "pia") : ""}</div>
+     ${qs.length ? qs.map(q => `<div class="qrow"><p class="small">${esc(q.text)} ${srcLink(q.cite, "icon")}</p>
+       <div class="row wrap">${q.asked ? chip("✓ Asked", "green") : chip("Not asked yet")}${isAE ? `<button class="btn small" onclick="A.ask('${q.id}')">${q.asked ? "Undo" : "Mark asked"}</button>` : ""}</div>
+       ${isAE && q.asked ? `<input class="ans" aria-label="The firm's answer" placeholder="The firm's answer" value="${esc(q.answer)}" onchange="A.answer('${q.id}',this)">` : q.answer ? `<p class="small"><b>Answer:</b> ${esc(q.answer)}</p>` : ""}</div>`).join("") : `<p class="small muted">${ok ? "None. Pia found everything it needed in the calls." : "Pia lists questions here when the calls don't cover something."}</p>`}</div>
+   <div class="card"><div class="lbl">What's next</div>${next.map(t => `<div class="row-i nb"><a class="ent small" onclick="go('pilots/${p.id}/progress')">${esc(t.title)}</a><span class="row small muted nowrap">${esc(t.due)} ${av(t.owner, "sm")}</span></div>`).join("") || `<p class="small muted">No open tasks.</p>`}</div>
+   <div class="card ${ok && r.proposals.length && !conf(p.id).owners ? "pia-card" : ""}"><div class="row between"><div class="lbl">Tasks for Legal Engineering</div>${ok && r.proposals.length ? (conf(p.id).owners ? chip("✓ Owners confirmed by " + esc(conf(p.id).owners.by), "green") : chip(PIA + " Owners proposed by Pia", "pia")) : ""}</div>
+     ${ok && r.proposals.length ? liveProposals(p.id).map(pr => { const o = ownerOf(p.id, pr) || (S.assigned[p.id] || {})[pr.id]; return `<div class="row-i nb"><span class="small">${esc(pr.title)}</span><span class="small nowrap">${o ? pl(o) : chip("▲ No owner", "warn")}</span></div>`; }).join("") + (conf(p.id).owners ? "" : `<p class="small muted">Waiting for ${pl(ROLES.esm.name)} to confirm.</p>`) : `<p class="small muted">None proposed yet.</p>`}</div>
    <div class="card span2"><div class="row between"><div class="lbl">Team</div><a class="ent small" onclick="go('pilots/${p.id}/team')">Workstreams and DRIs →</a></div><div class="row wrap">${p.team.map(n => `<span class="person-chip">${pl(n, true)}<span class="small muted">${esc(PERSON[n] ? PERSON[n].title : "")}</span></span>`).join("")}</div></div>
    <div class="card span2"><div class="lbl">Sources Pia reads</div><div class="row wrap">${SOURCES.map(([n, what, t]) => `<button class="src-chip" onclick="S.actFilter='${n}';go('pilots/${p.id}/activity')"><b>${n}</b><span class="small muted">${what} · ${t}</span></button>`).join("")}</div></div>
+   <div class="card span2 later"><div class="lbl">Later, if Legal Engineering wants it</div><div class="row wrap">${LATER.map(x => `<button class="btn pia" disabled title="Coming later" aria-label="${esc(x)}, coming later">${PIA} ${esc(x)}</button>`).join("")}</div></div>
   </div>`;
 }
 function miniStepper(pid) { const s = stageOf(pid); const bl = PROGRESS[pid].blocked; return `<div class="mini" aria-label="Stage ${s + 1} of ${STAGES.length}">${STAGES.map((st, i) => `<span class="${i < s ? "d" : i === s ? (bl ? "b" : "c") : ""}" title="${esc(st)}"></span>`).join("")}</div>`; }
 
 function progressTab(p) {
   const pr = PROGRESS[p.id]; const s = stageOf(p.id);
-  const dates = p.id === "hv" ? pr.dates.map((d, i) => (i === 2 || i === 1) && !S.approved.hv && !run("hv") ? "Planned" : d) : pr.dates;
+  const dates = p.id === "hv" ? pr.dates.map((d, i) => (i === 1 || i === 2) && !run("hv") ? "Planned" : d) : pr.dates;
   const cl = tasks().filter(t => t.pid === p.id && t.stage === s);
   const r = run(p.id);
-  const crit = pr.criteria || (r && r.status === "ready" ? r.useCases.filter(u => u.status !== "rejected").map(u => [u.criterion && u.criterion.text ? u.criterion.text : `Not agreed: ${u.practice} measure`, S.approved[p.id] ? "Not started" : "Draft"]) : []);
+  const crit = pr.criteria || (conf(p.id).ideas ? r.ideas.filter(u => u.status === "kept").map(u => [`${u.name}: ${u.successQuote ? "the firm said “" + u.successQuote.quote + "”" : "measure to agree"}`, "Not agreed"]) : []);
   const warn = ["hv", "lh", "cr"].includes(p.id);
-  return `<div class="card"><ol class="stepper">${STAGES.map((st, i) => { const state = i < s ? "done" : i === s ? (pr.blocked ? "blocked" : "current") : "up"; return `<li class="${state}"><span class="sdot">${state === "done" ? "✓" : state === "blocked" ? "!" : i + 1}</span><div><b>${i === 1 && !p.static ? PIA + " " : ""}${esc(st)}</b><div class="small muted">${esc(dates[i] || "")}</div><div class="small">${pr.owners[i] && PERSON[pr.owners[i]] ? pl(pr.owners[i]) : esc(pr.owners[i] || "")}</div></div></li>`; }).join("")}</ol>
+  return `<div class="card"><ol class="stepper">${STAGES.map((st, i) => { const state = i < s ? "done" : i === s ? (pr.blocked ? "blocked" : "current") : "up"; return `<li class="${state}"><span class="sdot">${state === "done" ? "✓" : state === "blocked" ? "!" : i + 1}</span><div><b>${esc(st)}</b><div class="small muted">${esc(dates[i] || "")}</div><div class="small">${pr.owners[i] && PERSON[pr.owners[i]] ? pl(pr.owners[i]) : esc(pr.owners[i] || "")}</div></div></li>`; }).join("")}</ol>
     <div class="row wrap small mt12">${chip(pr.daysLeft + " days left")}<span>Readout ${esc(pr.readout)}</span>·<span>Firm decides ${esc(pr.decision)}</span></div>
     ${warn ? `<div class="banner warn small mt12">The readout is less than two weeks before the firm decides. Consider moving it earlier.</div>` : ""}</div>
   <div class="grid2"><section><h3 class="sect">Checklist: ${esc(STAGES[s])} <span class="count">${cl.filter(t => !S.done[t.id]).length} open</span></h3>
    <div class="card flush">${cl.map(taskRow).join("") || `<div class="empty-s">No tasks for this stage.</div>`}</div></section>
-   <section><h3 class="sect">Success criteria</h3><div class="card flush">${crit.map(([c, st]) => `<div class="row-i"><span class="small">${esc(c)}</span>${chip(st === "Draft" ? PIA + " Draft" : st, st === "Met" ? "green" : st === "On track" ? "blue" : st === "At risk" ? "red" : st === "Draft" ? "pia" : "")}</div>`).join("") || `<div class="empty-s">Agreed once the plan is approved.</div>`}</div></section></div>`;
+   <section><h3 class="sect">Success criteria</h3><div class="card flush">${crit.map(([c, st]) => `<div class="row-i"><span class="small">${esc(c)}</span>${chip(st, st === "Met" ? "green" : st === "On track" ? "blue" : st === "At risk" ? "red" : "")}</div>`).join("") || `<div class="empty-s">The Legal Engineer agrees these with the firm once the plan is agreed.</div>`}</div></section></div>`;
 }
 
 function teamTab(p) {
@@ -438,120 +552,108 @@ function teamTab(p) {
 
 function activityTab(p) {
   const f = S.actFilter;
-  const filters = ["All", "Pia", "Checks", "People", "Digests", ...SOURCES.map(s => s[0])];
+  const filters = ["All", "Pia", "Decisions", "Checks", "People", "Digests", ...SOURCES.map(s => s[0])];
   let rows = S.audit.filter(e => e.pid === p.id);
   if (f === "Pia") rows = rows.filter(e => e.actor.startsWith("Pia"));
+  else if (f === "Decisions") rows = rows.filter(e => e.type === "decision" || e.type === "confirm");
   else if (f === "Checks") rows = rows.filter(e => e.type === "check");
   else if (f === "People") rows = rows.filter(e => PERSON[e.actor]);
   else if (f !== "All" && f !== "Digests") rows = rows.filter(e => (e.actor + " " + e.text).includes(f));
+  const slack = conf(p.id).ideas ? `<div class="slack"><div class="small muted">#pilot-${p.id}-${p.firm.split(" ")[0].toLowerCase()} · PilotHQ · posted after ${esc(conf(p.id).ideas.by)} confirmed</div><p><b>${esc(p.firm)} pilot plan agreed</b> by ${esc(conf(p.id).ideas.by)}.<br>${run(p.id).ideas.filter(i => i.status === "kept").map(i => "• " + esc(i.name)).join("<br>")}<br>${run(p.id).questions.length} questions for the firm (${esc(p.ae)}). Next: task owners and the first training invites.</p></div>` : "";
   return `<div class="filters">${filters.map(x => `<button class="fchip ${f === x ? "on" : ""}" onclick="A.actFilter('${x}')">${x}</button>`).join("")}</div>
-  ${f === "Digests" ? digestsList() : auditTable(rows, true)}`;
+  ${f === "Digests" ? digestsList() : (f === "All" || f === "Slack" ? slack : "") + auditTable(rows, true)}`;
 }
 function digestsList() {
   return `<div class="row between"><p class="small muted">Weekly digest, posted to #growth-pilots every Monday at 08:00.</p>${piaBtn("Preview next digest", "A.digest(-1)")}</div>
   <div class="card flush">${DIGESTS.map((d, i) => `<div class="row-i click" onclick="A.digest(${i})"><div><b>${d.week}</b><div class="small muted">#growth-pilots · sent ${d.sent} · ${d.items.length} pilots</div></div><span class="ent small">Open</span></div>`).join("")}</div>`;
 }
 function auditTable(rows, inPilot) {
-  const icon = { start: "▶", read: "📖", draft: "✎", check: "✓", approval: "👤", edit: "✎", write: "⤓", send: "✉", access: "⛔" };
+  const icon = { start: "▶", read: "📖", draft: "✎", check: "✓", decision: "✦", waiting: "…", confirm: "👤", edit: "✎", write: "⤓", access: "⛔" };
   return `<div class="card flush"><table class="tbl audit"><thead><tr><th>Time</th>${inPilot ? "" : "<th>Pilot</th>"}<th>Who</th><th>Type</th><th>What</th></tr></thead><tbody>
   ${rows.slice().reverse().map(e => `<tr class="${e.actor.startsWith("Pia") ? "pia-row" : ""}"><td class="mono small">${e.at}</td>${inPilot ? "" : `<td class="small">${esc(pilot(e.pid) ? pilot(e.pid).firm : "")}</td>`}<td class="small">${e.actor.startsWith("Pia") ? chip(PIA + " Pia", "pia") : PERSON[e.actor] ? pl(e.actor) : esc(e.actor)}</td><td>${chip((icon[e.type] || "") + " " + e.type)}</td><td class="small">${esc(e.text)}</td></tr>`).join("") || `<tr><td colspan="5"><div class="empty-s">Nothing logged yet.</div></td></tr>`}
   </tbody></table></div>`;
 }
 
-function srcLink(cite, label = "Source") {
+function srcLink(cite, lbl = "Source") {
   if (!cite) return "";
-  const l = lineAt(cite); const c = CALLS[cite.call];
+  const l = lineAt(cite); const c = CALLS[cite.call]; if (!l) return "";
   const i = l.text.toLowerCase().indexOf(cite.quote.toLowerCase());
   const html = i < 0 ? esc(l.text) : esc(l.text.slice(0, i)) + "<mark>" + esc(l.text.slice(i, i + cite.quote.length)) + "</mark>" + esc(l.text.slice(i + cite.quote.length));
-  return `<span class="src" tabindex="0" aria-label="Source">❝${label === "icon" ? "" : " " + label}<span class="hovercard"><span class="small muted">${c.source} · ${esc(c.title)} · ${c.date} · ${l.t}</span><span class="quote">“${html}”</span><span class="small">${pl(l.who)}</span><button class="btn small" onclick="A.call('${cite.call}',${cite.i})">View in call</button></span></span>`;
+  return `<span class="src" tabindex="0" aria-label="Source">❝${lbl === "icon" ? "" : " " + lbl}<span class="hovercard"><span class="small muted">${c.source} · ${esc(c.title)} · ${c.date} · ${l.t}</span><span class="quote">“${html}”</span><span class="small">${pl(l.who)}</span><button class="btn small" onclick="A.call('${cite.call}',${cite.i})">View in call</button></span></span>`;
 }
-function draftTag(pid) { return S.approved[pid] ? chip("✓ Approved by " + esc(S.approved[pid].by) + ", 18 Nov", "green") : chip(PIA + " Drafted by Pia", "pia"); }
 
-function useCasesTab(p, r) {
-  const editable = S.role === "le" && !S.approved[p.id];
-  const st = { draft: ["Draft", "pia"], accepted: ["✓ Accepted", "green"], rejected: ["✕ Rejected", "red"] };
-  return `<div class="row between"><p class="small muted">Hover ❝ to see the sentence each use case came from. Click a use case for detail.</p>${draftTag(p.id)}</div>
-  <div class="card flush ${S.approved[p.id] ? "" : "pia-card"}"><table class="tbl uc"><thead><tr><th>Use case</th><th>Practice</th><th>Success criterion</th><th>Past pilot</th><th>Status</th></tr></thead><tbody>
-  ${r.useCases.map(u => `<tr class="${u.status}">
-    <td><a class="ent uct" onclick="A.uc('${u.id}')">${esc(u.title)}</a> ${srcLink(u.cite, "icon")}<div class="small muted">${esc(u.feature)} ${u.change === "new" ? chip("New", "pia") : u.change === "changed" ? chip("Changed", "pia") : u.change === "kept" ? chip("Your edits kept") : ""}</div></td>
-    <td>${practiceLink(u.practice)}</td>
-    <td>${editable ? `<textarea rows="2" aria-label="Success criterion" placeholder="Not in the calls. Add one or ask the firm." onchange="A.editCrit('${u.id}',this)">${esc(u.criterion ? u.criterion.text : "")}</textarea>` : `<div>${u.criterion && u.criterion.text ? esc(u.criterion.text) : `<span class="badc">Not in the calls</span>`}</div>`}
-      <div class="small muted">${u.criterion && u.criterion.cite ? srcLink(u.criterion.cite) : ""} ${u.edited ? "Edited by you" : ""} ${u.change === "changed" ? `Was: ${esc(u.was)}` : ""}</div></td>
-    <td>${u.library ? `${libLink(u.library.id)} ${chip(u.library.score >= 80 ? "Strong" : "Partial", u.library.score >= 80 ? "green" : "")}<div class="small muted">${esc(u.library.entry.configured)}</div>` : `<span class="small muted">No match</span>`}</td>
-    <td>${chip(st[u.status][0], st[u.status][1])}${editable ? `<div class="row small-gap"><button class="icon ok" aria-label="Accept" title="Accept" onclick="A.setStatus('${u.id}','accepted')">✓</button><button class="icon no" aria-label="Reject" title="Reject" onclick="A.setStatus('${u.id}','rejected')">✕</button></div>` : ""}</td></tr>`).join("")}
+function ideasTab(p, r) {
+  const editable = me() === p.les[0] && !conf(p.id).ideas;
+  const st = { open: ["To decide", "pia"], kept: ["✓ Kept", "green"], merged: ["⇢ Merged", "blue"], dropped: ["✕ Dropped", "red"] };
+  const done = conf(p.id).ideas;
+  return `<div class="row between"><p class="small muted">What the firm asked for, in the firm's words. Hover ❝ for the sentence. Keep, merge, edit or drop each one; kept ideas become use cases you name.</p>${done ? chip("✓ Confirmed by " + esc(done.by), "green") : chip(PIA + " Pulled out by Pia", "pia")}</div>
+  <div class="card flush ${done ? "" : "pia-card"}"><table class="tbl ideas"><thead><tr><th>Idea</th><th>Practice</th><th>How they'd judge it</th><th>Decision</th><th>Use case name</th></tr></thead><tbody>
+  ${r.ideas.map(u => `<tr class="${u.status}">
+    <td>${S.editing === u.id && editable ? `<textarea rows="2" aria-label="Edit idea" onblur="A.saveEdit('${u.id}',this)">${esc(u.text)}</textarea>` : `<a class="ent uct" onclick="A.idea('${u.id}')">“${esc(u.text)}”</a>`} ${srcLink(u.cite, "icon")}
+      <div class="small muted row wrap">${u.followUp ? chip(PIA + " Found in " + esc(u.followUp.from), "pia") : ""}${r.questions.some(q => q.ideaId === u.id) ? chip("? Question for the firm", "warn") : ""}${u.edited ? chip("Edited") : ""}${u.change === "new" ? chip("New", "pia") : u.change === "found" ? chip("Changed", "pia") : u.change === "kept" ? chip("Your edits kept") : ""}</div></td>
+    <td class="small">${esc(u.practice)}</td>
+    <td class="small">${u.successQuote ? `“${esc(u.successQuote.quote)}” ${srcLink(u.successQuote, "icon")}` : `<span class="muted">Not in the calls</span>`}</td>
+    <td>${chip(st[u.status][0], st[u.status][1])}${u.status === "merged" ? `<div class="small muted">into ${esc((r.ideas.find(x => x.id === u.mergeInto) || {}).topic)}</div>` : ""}
+      ${editable ? `<div class="row wrap small-gap"><button class="btn small ${u.status === "kept" ? "primary" : ""}" onclick="A.decide('${u.id}','kept')">Keep</button>
+        <select aria-label="Merge with" onchange="A.merge('${u.id}',this)"><option value="">Merge with…</option>${r.ideas.filter(x => x.id !== u.id && x.status !== "dropped" && x.status !== "merged").map(x => `<option value="${x.id}" ${u.mergeInto === x.id ? "selected" : ""}>${esc(x.topic)}</option>`).join("")}</select>
+        <button class="btn small" onclick="A.edit('${u.id}')">Edit</button><button class="btn small" onclick="A.decide('${u.id}','dropped')">Drop</button></div>` : ""}</td>
+    <td>${u.status === "kept" ? (editable ? `<input class="ans" aria-label="Use case name" value="${esc(u.name)}" onchange="A.name('${u.id}',this)">` : `<b>${esc(u.name)}</b>`) : `<span class="small muted">–</span>`}</td></tr>`).join("")}
   </tbody></table></div>
-  ${r.removed.length ? `<details class="card soft"><summary><b>${r.removed.length} removed by the source check</b> <span class="small muted">before anyone saw them</span></summary>${r.removed.map(x => `<p class="small"><s>${esc(x.title)}</s> · ${esc(x.why)}</p>`).join("")}</details>` : ""}
+  ${r.removed.length ? `<details class="card soft"><summary><b>${r.removed.length} removed by the source check</b> <span class="small muted">before anyone saw them</span></summary>${r.removed.map(x => `<p class="small"><s>${esc(x.text)}</s> · ${esc(x.why)}</p>`).join("")}</details>` : ""}
   ${r.skipped && r.skipped.length ? `<div class="banner warn small">Skipped ${r.skipped.length} call because the firm has not agreed to AI processing.</div>` : ""}`;
 }
 function gapsTab(p, r) {
-  const editable = S.role === "le" && !S.approved[p.id];
-  if (!r.gaps.length) return `<div class="empty card"><h3>No open questions</h3><p class="muted">Pia asks here when the calls don't cover something.</p></div>`;
-  return `<p class="small muted">Where the calls don't say, Pia asks instead of guessing.</p>
-  ${r.gaps.map(g => `<div class="card pia-card"><div class="row between">${chip(PIA + " " + esc(g.kind), "pia")}${srcLink(g.cite)}</div><p>${esc(g.text)}</p>
-   ${editable ? `<textarea rows="2" aria-label="Answer" placeholder="Your answer, or leave it for ${esc(p.ae)} to chase" onchange="A.answer('${g.id}',this)">${esc(g.answer)}</textarea>` : g.answer ? `<p class="small"><b>Answer:</b> ${esc(g.answer)}</p>` : `<p class="small muted">To chase: ${pl(p.ae)}</p>`}</div>`).join("")}`;
+  const fu = r.ideas.filter(u => u.followUp || r.questions.some(q => q.ideaId === u.id));
+  if (!fu.length) return `<div class="empty card"><h3>No gaps</h3><p class="muted">Every idea was clear and came with how the firm would judge it.</p></div>`;
+  return `<p class="small muted">Where an idea was vague or had no success measure, Pia looked in the other calls and the deal notes before asking.</p>
+  ${fu.map(u => { const q = r.questions.find(x => x.ideaId === u.id); return `<div class="card pia-card"><div class="row between"><b>${esc(u.topic)}</b>${decided()}</div>
+   ${u.followUp ? `<p class="small">Found in ${esc(u.followUp.from)}: ${u.followUp.cite ? `“${esc(u.followUp.cite.quote)}” ${srcLink(u.followUp.cite, "icon")}` : esc(u.followUp.note)}</p>`
+   : `<p class="small">Not found in the other calls or the deal notes. Question for ${pl(p.ae)} to ask the firm:</p><p>${esc(q.text)}</p><div class="row">${q.asked ? chip("✓ Asked", "green") : chip("Not asked yet")}${q.answer ? `<span class="small"><b>Answer:</b> ${esc(q.answer)}</span>` : ""}</div>`}</div>`; }).join("")}`;
 }
-function dummyTab(p, r) {
-  const editable = S.role === "le" && !S.approved[p.id];
-  return `<p class="small muted">First drafts, all invented. Every draft runs through the deal-fact screen before you see it.</p>
-  ${r.useCases.filter(u => r.dummy[u.id]).map(u => { const d = r.dummy[u.id]; return `<div class="card ${d.status === "blocked" ? "blocked" : S.approved[p.id] ? "" : "pia-card"}">
-    <div class="row between"><b>${esc(u.title)}</b>${d.status === "blocked" ? chip("✕ Blocked", "red") : draftTag(p.id)}</div><p class="small">${esc(d.brief)}</p>
-    ${d.status === "blocked" ? `<div class="banner bad small"><b>Blocked by the deal-fact screen.</b> ${d.hits.map(h => `"${esc(h.term)}" is a ${esc(h.kind)} (found by ${h.by}, from Salesforce)`).join("; ")}. Hidden so it can't be copied into the pilot.</div>
-      <div class="doc blur" aria-hidden="true">${esc(d.docs[0].body)}</div>${editable ? piaBtn("Ask Pia to redraft with invented names", `A.redraft('${u.id}')`) : ""}`
-    : d.docs.map((doc, k) => `<div class="doc"><div class="doctitle">${esc(doc.title)} ${chip("Invented")}</div><div class="docbody" ${editable ? `contenteditable="true" onblur="A.editDoc('${u.id}',${k},this)"` : ""}>${esc(doc.body)}</div></div>`).join("")}</div>`; }).join("")}`;
-}
-function scheduleTab(p, r) {
-  const cal = p.calendar; if (!cal || !r.slots.length) return `<div class="empty card"><h3>No slots proposed</h3><p class="muted">Pia proposes slots once the plan is drafted.</p></div>`;
-  const sel = S.selectedSlot[p.id] ?? 0; const s = r.slots[sel]; const people = [...cal.internal, ...cal.firm];
-  const invite = `To: Priya Raman, Wei Ling Ho (Harrow & Vale); Tom Achebe, Mei Tan (ABC Inc.)
-Subject: Pilot: first training session for banking associates
-When: ${s.day} ${s.date}, ${s.local.find(x => x.city === "London").time} London / ${s.local.find(x => x.city === "Singapore").time} Singapore (60 min)
 
-Hi Priya and Wei Ling,
+function inviteText(p, s, sl) {
+  const firm = s.firm.map(x => x.name).join(", "); const ours = s.internal.map(x => x.name).join(", ");
+  const times = sl.local.filter((x, i, a) => a.findIndex(y => y.city === x.city) === i).map(x => `${x.time} ${x.city}`).join(" / ");
+  return `To: ${firm} (${p.firm.replace(" LLP", "")}); ${ours} (ABC Inc.)
+Subject: Pilot: first training session for banking associates (${s.label})
+When: ${sl.day} ${sl.date}, ${times} (60 min)
 
-As agreed, we'd like to start the pilot with the banking associates in London and Singapore. This first session covers facility agreement review, using invented agreements only.
+Hi ${s.firm.map(x => x.name.split(" ")[0]).join(" and ")},
+
+As agreed, we'd like to start the pilot with the banking associates. This session covers the first use case, using invented documents only.${s.key === "b" ? " We've set this as a separate session so New York can join live." : ""}
 
 Does this time work for you? Happy to move it.
 
 Sofia`;
-  return `<div class="card pia-card"><div class="row between"><b>${esc(cal.session)}</b>${srcLink(cal.sessionCite)}</div>
-    <p class="small muted">${PIA} Pia proposed these from the team's free/busy and the firm's working hours.</p>
+}
+function scheduleTab(p, r) {
+  const sc = r.schedule; if (!sc) return `<div class="empty card"><h3>No slots proposed</h3><p class="muted">Pia proposes slots once it has read the calls and free/busy.</p></div>`;
+  const isAE = me() === p.ae;
+  return `${sc.fallback ? `<div class="card pia-card"><div class="row between"><b>No time works for everyone</b>${decided()}</div><p class="small">${PIA} Pia chose to ${sc.fallback === "split" ? "split the session by region" : "record the session"}. ${esc(sc.why)}</p><div class="row small">${chip("✓ Check · Slot check passed")}<span class="muted">Every slot below is inside 08:00 to 18:00 local and clear on ABC Inc. free/busy.</span></div></div>` : ""}
+  ${sc.sessions.map(s => { const sel = (S.slot[p.id] || {})[s.key] || 0; const sl = s.slots[sel]; const people = [...s.internal, ...s.firm]; const sent = (S.sent[p.id] || {})[s.key];
+    return `<div class="card pia-card"><div class="row between"><div><b>${esc(p.calendar.session)}</b><div class="small muted">${esc(s.label)} · ${people.length} people</div></div>${srcLink(p.calendar.sessionCite)}</div>
     <table class="tbl slots"><thead><tr><th></th><th>Slot</th>${people.map(x => `<th>${pl(x.name)}<div class="small muted">${x.city}</div></th>`).join("")}</tr></thead><tbody>
-    ${r.slots.map((sl, i) => `<tr class="click ${i === sel ? "sel" : ""}" onclick="A.slot(${i})"><td><input type="radio" name="slot" aria-label="Choose ${sl.day} ${sl.date}" ${i === sel ? "checked" : ""}></td><td><b>${sl.day} ${sl.date}</b></td>${sl.local.map(x => `<td>${x.time}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
-  <div class="card pia-card"><div class="row between"><b>Invite</b>${chip(PIA + " Drafted by Pia", "pia")}</div><pre id="invite" class="invite">${esc(invite)}</pre>
-    <button class="btn ${S.role === "ae" ? "primary" : ""}" onclick="A.copyInvite()">Copy invite to send from my calendar</button></div>`;
+    ${s.slots.map((x, i) => `<tr class="click ${i === sel ? "sel" : ""}" onclick="A.slot('${s.key}',${i})"><td><input type="radio" name="slot-${s.key}" aria-label="Choose ${x.day} ${x.date}" ${i === sel ? "checked" : ""}></td><td><b>${x.day} ${x.date}</b></td>${x.local.map(y => `<td>${y.time}</td>`).join("")}</tr>`).join("")}</tbody></table>
+    <div class="row between mt12"><div class="lbl">Invite</div>${sent ? chip("✓ Sent by " + esc(sent), "green") : chip(PIA + " Drafted by Pia", "pia")}</div><pre id="invite-${s.key}" class="invite">${esc(inviteText(p, s, sl))}</pre>
+    <div class="row wrap"><button class="btn" onclick="A.copyInvite('${s.key}')">Copy invite</button>${isAE && !sent ? `<button class="btn primary" onclick="A.markSent('${s.key}')">Mark sent</button>` : ""}<span class="small muted">PilotHQ doesn't send anything. Send it from your own calendar.</span></div></div>`; }).join("")}`;
 }
 
 function piaPanel(p, r, anim) {
-  const head = `<div class="row between"><h3 class="piah">${PIA} Pia</h3><button class="icon" aria-label="Close Pia panel" onclick="A.pia()">✕</button></div><p class="small muted">The agent reads and drafts. People approve.</p>`;
+  const head = `<div class="row between"><h3 class="piah">${PIA} Pia</h3><button class="icon" aria-label="Close Pia panel" onclick="A.pia()">✕</button></div><p class="small muted">Pia reads, follows up and proposes. People decide.</p>`;
   if (!r) return head + `<div class="empty-s">Pia hasn't run on this pilot yet. It starts when the deal reaches pilot stage in Salesforce.</div>`;
   const shown = anim ? S.anim.shown : r.steps.length;
-  const tag = { fixed: ["Check", ""], ai: [PIA + " Pia", "pia"], person: ["Person", "green"] };
+  const tag = { fixed: ["Check", ""], ai: [PIA + " Pia", "pia"], decision: [PIA + " Pia · Decided", "pia"], person: ["Person", "green"] };
   const icon = { ok: "✓", warn: "!", blocked: "✕", error: "✕", stop: "■", wait: "…" };
-  const canAct = S.role === "le" && !S.approved[p.id] && !anim;
-  return head + `<div class="small muted">Run ${r.version}${S.runs[p.id].length > 1 ? " of " + S.runs[p.id].length : ""} · ${r.read.length} calls read</div>
+  const canAct = me() === p.les[0] && !conf(p.id).ideas && !anim;
+  const skipped = S.skips.filter(x => x.pid === p.id);
+  return head + `<div class="small muted">Run ${r.version}${S.runs[p.id].length > 1 ? " of " + S.runs[p.id].length : ""} · ${r.piaVersion} · ${r.toolSteps} of ${r.maxSteps} steps · ${r.read.length} calls read</div>
    <ol class="steps">${r.steps.map((st, i) => { const state = i < shown ? st.status : i === shown && anim ? "running" : "pending"; return `<li class="st ${state} k-${st.kind}"><span class="dot">${state === "running" ? `<span class="spin"></span>` : state === "pending" ? "" : icon[st.status]}</span><div><div class="row between"><b class="small">${esc(st.label)}</b>${chip(tag[st.kind][0], tag[st.kind][1])}</div>${i < shown ? `<div class="small muted">${esc(st.detail)}</div>${st.tool ? `<span class="tool small">${esc(st.tool)}</span>` : ""}` : ""}</div></li>`; }).join("")}</ol>
-   <div class="stack">${r.status === "failed" && S.role === "le" && !anim ? piaBtn("Ask Pia to try again", `A.retry('${p.id}')`) : ""}
-   ${canAct && r.status === "ready" ? piaBtn("Ask Pia to re-read the calls", `A.reread('${p.id}')`) : ""}
-   <button class="btn pia" disabled title="Coming later">${PIA} Ask Pia about this pilot</button></div>`;
+   ${skipped.length ? `<p class="small muted">${skipped.length} repeat trigger${skipped.length > 1 ? "s" : ""} skipped: same deal and stage within 10 minutes.</p>` : ""}
+   <div class="stack">${["failed", "stopped"].includes(r.status) && S.role === "le" && !anim ? piaBtn("Ask Pia to try again", `A.retry('${p.id}')`) : ""}
+   ${canAct && r.status === "waiting" ? piaBtn("Ask Pia to re-read the calls", `A.reread('${p.id}')`) : ""}</div>`;
 }
 
-// ---------- Library, people, firm ----------
-function libraryView() {
-  const practices = ["All", ...new Set(LIBRARY.map(e => LIB_EXTRA[e.id].practice))];
-  const list = LIBRARY.filter(e => S.libFilter === "All" || LIB_EXTRA[e.id].practice === S.libFilter);
-  return `<div class="ph"><div><div class="eyebrow">Pilot Library</div><h1>What worked before</h1><p class="muted">De-identified past pilots. Pia searches these when it drafts a new plan.</p></div></div>
-  <div class="filters">${practices.map(x => `<button class="fchip ${S.libFilter === x ? "on" : ""}" onclick="A.libFilter('${jq(x)}')">${esc(x)}</button>`).join("")}</div>
-  <div class="cards">${list.map(e => { const used = matchedBy(e.id); return `<div class="card click libcard" onclick="go('library/${e.id}')"><div class="row between"><span class="small muted mono">${e.id}</span>${chip(esc(LIB_EXTRA[e.id].practice))}</div><h3>${esc(e.useCase)}</h3><p class="small muted">${esc(e.summary)}</p><p class="small">${esc(e.configured)}</p>${used.length ? `<div class="small pia-t">${PIA} Pia matched this in ${used.map(esc).join(", ")}</div>` : ""}</div>`; }).join("") || `<div class="empty-s">No entries for this practice yet.</div>`}</div>`;
-}
-function matchedBy(id) { const out = []; for (const [pid, rs] of Object.entries(S.runs)) { const r = rs[rs.length - 1]; if (r.useCases.some(u => u.library && u.library.id === id) && canView(S.role, pilot(pid))) out.push(pilot(pid).firm); } return out; }
-function libEntryView(id) {
-  const e = LIBRARY.find(x => x.id === id); if (!e) return `<div class="empty card"><h3>Not found</h3></div>`;
-  const used = matchedBy(id);
-  return `<div class="crumbs"><a class="ent subtle" onclick="go('library')">Pilot Library</a> / <span class="muted">${id}</span></div>
-  <div class="ph"><div><div class="eyebrow">${esc(LIB_EXTRA[id].practice)} · ${id}</div><h1>${esc(e.useCase)}</h1><p class="muted">${esc(e.summary)} · de-identified</p></div></div>
-  <div class="grid2"><div class="card"><div class="lbl">What was configured</div><p>${esc(e.configured)}</p><div class="lbl">Outcome</div><p>${esc(LIB_EXTRA[id].outcome)}</p></div>
-  <div class="card"><div class="lbl">Reused in current pilots</div>${used.length ? used.map(f => `<p class="pia-t">${PIA} ${esc(f)}</p>`).join("") : `<p class="small muted">Not matched in a current pilot yet.</p>`}</div></div>`;
-}
+// ---------- People, firm ----------
 function peopleView() {
   const ppl = visiblePeople();
   const groups = [["ABC Inc.", ppl.filter(p => p.org === "ABC Inc.")], ["Firm contacts", ppl.filter(p => p.org !== "ABC Inc.")]];
@@ -564,7 +666,7 @@ function firmView(pid) {
   const f = FIRMS[pid]; const contacts = PEOPLE.filter(x => x.org === pid);
   return `<div class="crumbs"><a class="ent subtle" onclick="go('pilots')">${S.role === "esm" ? "Portfolio" : "Pilots"}</a> / <span class="muted">${esc(p.firm)}</span></div>
   <div class="ph"><div><div class="eyebrow">Firm</div><h1>${esc(p.firm)}</h1><p class="muted">${esc(f.about)}</p></div><button class="btn primary" onclick="go('pilots/${pid}/overview')">Open pilot</button></div>
-  <div class="grid2"><div class="card"><div class="lbl">Profile</div><div class="kv"><span>HQ</span><b>${esc(f.hq)}</b><span>Offices</span><b>${f.offices.map(esc).join(", ")}</b><span>Lawyers</span><b>${f.lawyers}</b></div><div class="lbl">Practice areas</div><div class="row wrap">${f.practices.map(x => chip(practiceLink(x))).join("")}</div></div>
+  <div class="grid2"><div class="card"><div class="lbl">Profile</div><div class="kv"><span>HQ</span><b>${esc(f.hq)}</b><span>Offices</span><b>${f.offices.map(esc).join(", ")}</b><span>Lawyers</span><b>${f.lawyers}</b></div><div class="lbl">Practice areas</div><div class="row wrap">${f.practices.map(x => chip(esc(x))).join("")}</div></div>
   <div class="card"><div class="lbl">Contacts</div>${contacts.map(c => `<div class="row-i nb">${pl(c.name, true)}<span class="small muted">${esc(c.title)}</span></div>`).join("") || `<p class="small muted">No contacts recorded yet.</p>`}</div>
   <div class="card"><div class="lbl">Pilot</div><p>${pilotLink(pid, "Open the pilot")} · ${p.users} users · ${p.days} days</p>${progressBar(pid)}</div>
   <div class="card"><div class="lbl">Calls</div>${(p.calls || []).map(c => `<div class="row-i nb"><a class="ent" onclick="A.call('${c}',null)">${CALLS[c].source} · ${esc(CALLS[c].title)}</a><span class="small muted">${CALLS[c].date}${CALLS[c].consent ? "" : " · no AI consent"}</span></div>`).join("") || `<p class="small muted">No recorded calls.</p>`}
@@ -573,35 +675,57 @@ function firmView(pid) {
 
 // ---------- Quality (AI Enablement) ----------
 function qualityView(tab) {
-  const tabs = [["checks", "Acceptance checks"], ["tests", "Test set"], ["runs", "Pia's runs"], ["health", "Connections"], ["log", "Activity log"]];
+  const tabs = [["checks", "Acceptance checks"], ["tests", "Test set"], ["learning", "Learning"], ["runs", "Run log"], ["health", "Health"]];
   return `<div class="ph"><div><div class="eyebrow">Quality</div><h1>Is Pia safe and working?</h1><p class="muted">Pia runs on every pilot, for every team. This is where you check it.</p></div></div>
   <nav class="ptabs">${tabs.map(([k, l]) => `<a class="${tab === k ? "on" : ""}" onclick="go('quality/${k}')">${l}</a>`).join("")}</nav>
-  ${tab === "checks" ? acView() : tab === "tests" ? testView() : tab === "runs" ? runLog() : tab === "health" ? healthView() : auditTable(S.audit, false)}`;
+  ${tab === "checks" ? acView() : tab === "tests" ? testView() : tab === "learning" ? learningView() : tab === "runs" ? runLog() : healthView()}`;
 }
 function acView() {
   const res = S.acResults; const passed = res ? res.filter(r => r.pass).length : 0;
-  return `<div class="row between"><p class="muted small">Each acceptance criterion, run against the current version of Pia.</p><button class="btn primary" onclick="A.runChecks()">Run all 12 checks</button></div>
-  ${res ? `<div class="banner ${passed === res.length ? "good" : "bad"}">${passed} of ${res.length} acceptance criteria pass</div>` : ""}
-  <div class="card flush"><table class="tbl"><thead><tr><th>#</th><th>Given</th><th>When</th><th>Then</th><th>Result</th></tr></thead><tbody>
-  ${AC_DEFS.map((d, i) => { const r = res && res[i]; return `<tr><td><b>${d.id}</b></td><td class="small">${esc(d.given)}</td><td class="small">${esc(d.when)}</td><td class="small">${esc(d.then)}</td><td>${r ? `${chip(r.pass ? "✓ Pass" : "✕ Fail", r.pass ? "green" : "red")}<div class="small muted">${esc(r.evidence)}</div>` : `<span class="small muted">Not run</span>`}</td></tr>`; }).join("")}</tbody></table></div>`;
+  return `<div class="row between"><p class="muted small">Each acceptance check, run against ${PIA_VERSION}.</p><button class="btn primary" onclick="A.runChecks()">Run all ${AC_DEFS.length} checks</button></div>
+  ${res ? `<div class="banner ${passed === res.length ? "good" : "bad"}">${passed} of ${res.length} acceptance checks pass</div>` : ""}
+  <div class="card flush"><table class="tbl"><thead><tr><th>#</th><th>Check</th><th>Result</th></tr></thead><tbody>
+  ${AC_DEFS.map((d, i) => { const r = res && res[i]; return `<tr><td><b>${i + 1}</b></td><td class="small">${esc(d)}</td><td>${r ? `${chip(r.pass ? "✓ Pass" : "✕ Fail", r.pass ? "green" : "red")}<div class="small muted">${esc(r.evidence)}</div>` : `<span class="small muted">Not run</span>`}</td></tr>`; }).join("")}</tbody></table></div>`;
 }
 function testView() {
   const t = S.testRun; const n = t ? t.n : 0; const rows = TEST_SET.slice(0, n);
   const lab = rows.reduce((a, r) => a + r[2], 0), found = rows.reduce((a, r) => a + r[3], 0), inv = rows.reduce((a, r) => a + r[4], 0);
   const pct = lab ? Math.round(found / lab * 100) : 0; const done = t && t.done;
-  return `<div class="row between"><p class="muted small">24 past pilots labelled by Legal Engineers. Pass mark: at least 80% found and none invented. A failure blocks release.</p><button class="btn primary" onclick="A.runTests()">Run test set</button></div>
-  <div class="tiles"><div class="tile"><span class="lbl">Found</span><b>${t ? pct + "%" : "–"}</b><span class="small muted">${t ? `${found} of ${lab}` : "target 80%"}</span></div><div class="tile"><span class="lbl">Invented</span><b>${t ? inv : "–"}</b><span class="small muted">target 0</span></div><div class="tile"><span class="lbl">Deal facts in dummy data</span><b>${t ? 0 : "–"}</b><span class="small muted">target 0</span></div><div class="tile"><span class="lbl">Release gate</span><b>${done ? (pct >= 80 && inv === 0 ? `<span class="okc">✓ Pass</span>` : `<span class="badc">Blocked</span>`) : t ? "Running" : "–"}</b></div></div>
-  <div class="card flush"><table class="tbl"><thead><tr><th>Past pilot</th><th>Practice (de-identified)</th><th>Labelled</th><th>Found</th><th>Invented</th><th></th></tr></thead><tbody>
+  return `<div class="row between"><p class="muted small">24 past pilots whose ideas were labelled by Legal Engineers. Pass mark: at least 80% of ideas found and none invented. A failure blocks release.</p><button class="btn primary" onclick="A.runTests()">Run test set</button></div>
+  <div class="tiles"><div class="tile"><span class="lbl">Ideas found</span><b>${t ? pct + "%" : "–"}</b><span class="small muted">${t ? `${found} of ${lab}` : "target 80%"}</span></div><div class="tile"><span class="lbl">Ideas invented</span><b>${t ? inv : "–"}</b><span class="small muted">target 0</span></div><div class="tile"><span class="lbl">Release gate</span><b>${done ? (pct >= 80 && inv === 0 ? `<span class="okc">✓ Pass</span>` : `<span class="badc">Blocked</span>`) : t ? "Running" : "–"}</b><span class="small muted">${PIA_VERSION}</span></div></div>
+  <div class="card flush"><table class="tbl"><thead><tr><th>Past pilot</th><th>Practice (de-identified)</th><th>Ideas labelled</th><th>Found</th><th>Invented</th><th></th></tr></thead><tbody>
   ${rows.map(r => `<tr><td>${r[0]}</td><td>${esc(r[1])}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${chip(Math.round(r[3] / r[2] * 100) + "%", r[3] / r[2] >= 0.8 ? "green" : "warn")}</td></tr>`).join("") || `<tr><td colspan="6"><div class="empty-s">Not run yet.</div></td></tr>`}</tbody></table></div>`;
 }
+function learningView() {
+  const W = 560, H = 220, L = 40, R = 120, T = 16, B = 30; const xs = i => L + i * ((W - L - R) / (LEARNING.weeks.length - 1)); const ys = v => T + (100 - v) / 50 * (H - T - B);
+  const series = [["Ideas kept unchanged", LEARNING.ideasKept, "var(--pia)"], ["Owners accepted unchanged", LEARNING.ownersAccepted, "var(--blue)"]];
+  const grid = [50, 75, 100].map(v => `<line x1="${L}" x2="${W - R}" y1="${ys(v)}" y2="${ys(v)}" class="gl"/><text x="${L - 8}" y="${ys(v) + 4}" text-anchor="end" class="ax">${v}%</text>`).join("");
+  const xl = LEARNING.weeks.map((w, i) => `<text x="${xs(i)}" y="${H - 8}" text-anchor="middle" class="ax">${w}</text>`).join("");
+  const ly = series.map(([, v]) => ys(v.at(-1)) + 4); if (Math.abs(ly[0] - ly[1]) < 14) { const mid = (ly[0] + ly[1]) / 2, up = ly[0] < ly[1] ? 0 : 1; ly[up] = mid - 7; ly[1 - up] = mid + 7; }
+  const lines = series.map(([n, v, c], si) => `<polyline fill="none" stroke="${c}" stroke-width="2" points="${v.map((y, i) => xs(i) + "," + ys(y)).join(" ")}"/>${v.map((y, i) => `<circle cx="${xs(i)}" cy="${ys(y)}" r="4" fill="${c}" stroke="var(--surface)" stroke-width="2"><title>${n}, week of ${LEARNING.weeks[i]}: ${y}%</title></circle><circle cx="${xs(i)}" cy="${ys(y)}" r="12" fill="transparent"><title>${n}, week of ${LEARNING.weeks[i]}: ${y}%</title></circle>`).join("")}<text x="${xs(v.length - 1) + 10}" y="${ly[si]}" class="dl">${v.at(-1)}% ${n.split(" ")[0].toLowerCase()}</text>`).join("");
+  const labels = [...S.labels.slice().reverse(), ...LEARNING.labels];
+  return `<p class="small">Approved ideas, with client details removed, become examples for later runs in the same practice area.</p>
+  <div class="grid2 wide-l"><div class="card"><div class="lbl">Trend, by week</div>
+    <div class="legend small">${series.map(([n, , c]) => `<span><i style="background:${c}"></i>${n}</span>`).join("")}</div>
+    <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Ideas kept unchanged rose from 58% to 81%; owners accepted unchanged rose from 70% to 83%, over four weeks">${grid}${xl}${lines}</svg>
+    <div class="tscroll"><table class="tbl small"><thead><tr><th>Week of</th>${LEARNING.weeks.map(w => `<th>${w}</th>`).join("")}</tr></thead><tbody>${series.map(([n, v]) => `<tr><td>${n}</td>${v.map(x => `<td>${x}%</td>`).join("")}</tr>`).join("")}</tbody></table></div></div>
+  <div class="card"><div class="lbl">Examples in the learning store</div>${Object.entries(LEARNING.examples).map(([k, e]) => `<div class="row-i nb"><span class="small">${esc(k)}</span><b class="small">${e.n} approved ideas</b></div>`).join("")}</div></div>
+  <h3 class="sect">Latest labels <span class="count">${labels.length}</span></h3>
+  <div class="card flush"><table class="tbl"><thead><tr><th>When</th><th>Pilot</th><th>Label</th><th>Detail</th><th>By</th></tr></thead><tbody>
+  ${labels.map(l => `<tr><td class="small">${esc(l.at)}</td><td class="small">${esc(l.pilot)}</td><td>${chip(esc(l.kind), /dropped|changed/i.test(l.kind) ? "warn" : /kept|accepted/i.test(l.kind) ? "green" : "")}</td><td class="small">${esc(l.detail)}</td><td class="small">${PERSON[l.by] ? pl(l.by) : esc(l.by)}</td></tr>`).join("")}</tbody></table></div>`;
+}
 function runLog() {
-  const all = []; for (const [pid, rs] of Object.entries(S.runs)) rs.forEach(r => all.push({ pid, r }));
-  return `<div class="card flush"><table class="tbl"><thead><tr><th>Run</th><th>Pilot</th><th>Trigger</th><th>Status</th><th>Sources</th><th>Kept / removed</th><th>Blocked</th><th>Cost</th></tr></thead><tbody>
-  ${all.map(({ pid, r }) => `<tr><td>v${r.version}</td><td>${esc(pilot(pid).firm)}</td><td class="small">${esc(r.steps[0].detail)}</td><td>${chip(r.status, r.status === "ready" ? "green" : r.status === "failed" ? "red" : "warn")}</td><td class="small">${r.read.length ? r.read.map(c => CALLS[c].source).join(", ") : "none"}</td><td>${r.useCases.length} / ${r.removed.length}</td><td>${Object.values(r.dummy).filter(d => d.hits && d.hits.length).length}</td><td>${r.status === "ready" ? "$" + (0.9 + 0.25 * r.read.length).toFixed(2) : "$0.00"}</td></tr>`).join("") || `<tr><td colspan="8"><div class="empty-s">No runs yet.</div></td></tr>`}</tbody></table></div>`;
+  const all = []; for (const [pid, rs] of Object.entries(S.runs)) rs.forEach(r => all.push({ pid, r })); for (const s of S.skips) all.push(s);
+  all.sort((a, b) => a.r.at - b.r.at);
+  const kc = { waiting: "green", failed: "red", skipped: "", stopped: "warn", ambiguous: "warn", nothing: "warn" };
+  return `<div class="card flush"><table class="tbl"><thead><tr><th>Run</th><th>Version</th><th>Pilot</th><th>Trigger</th><th>Status</th><th>Steps used</th><th>Sources</th><th>Ideas kept / removed</th><th>Questions</th><th>Cost</th></tr></thead><tbody>
+  ${all.map(({ pid, r }) => `<tr><td>${r.version ? "v" + r.version : "–"}</td><td class="mono small">${r.piaVersion}</td><td>${esc(pilot(pid).firm)}</td><td class="small">${esc(r.trigger)}</td><td>${chip(r.status === "waiting" ? "waiting for people" : r.status, kc[r.status])}${r.reason ? `<div class="small muted">${esc(r.reason)}</div>` : ""}</td><td>${r.toolSteps} of ${r.maxSteps}</td><td class="small">${r.read.length ? r.read.map(c => CALLS[c].source).join(", ") : "none"}</td><td>${r.ideas.length} / ${r.removed.length}</td><td>${r.questions.length}</td><td>${r.toolSteps ? "$" + (0.4 + 0.12 * r.toolSteps).toFixed(2) : "$0.00"}</td></tr>`).join("") || `<tr><td colspan="10"><div class="empty-s">No runs yet.</div></td></tr>`}</tbody></table></div>
+  <h3 class="sect">All activity</h3>${auditTable(S.audit, false)}`;
 }
 function healthView() {
-  return `<div class="card flush"><table class="tbl"><thead><tr><th>Connection</th><th>Used for</th><th>Access</th><th>Scope</th><th>Last sync</th><th>Status</th><th></th></tr></thead><tbody>
-  ${SOURCES.map(([n, what, t]) => `<tr><td><b>${n}</b></td><td class="small">${what}</td><td class="small">${n === "Slack" || n === "Notion" ? "Writes after approval" : "Reads only"}</td><td class="small">Deal team records only</td><td class="small">${t}</td><td>${chip("✓ Connected", "green")}</td><td><button class="btn small" onclick="toast('Reconnect starts in the real app.')">Reconnect</button></td></tr>`).join("")}</tbody></table></div>`;
+  return `<div class="card"><div class="lbl">Pia's boundary</div><div class="kv"><span>Tools</span><b>${Object.keys(TOOLS).join(", ")} (${Object.values(TOOLS).every(t => t.readOnly) ? "all read-only" : "includes a write tool"})</b><span>Step limit</span><b>${MAX_STEPS} tool steps per run</b><span>Repeat triggers</span><b>Same deal and stage within 10 minutes is skipped</b><span>Version</span><b>${PIA_VERSION}</b><span>Writes</span><b>Only PilotHQ, after a person confirms their part</b></div></div>
+  <div class="card flush"><table class="tbl"><thead><tr><th>Connection</th><th>Used for</th><th>Access</th><th>Scope</th><th>Last sync</th><th>Status</th><th></th></tr></thead><tbody>
+  ${SOURCES.map(([n, what, t]) => `<tr><td><b>${n}</b></td><td class="small">${what}</td><td class="small">${n === "Slack" || n === "Notion" ? "Writes after a person confirms" : "Reads only"}</td><td class="small">Deal team records only</td><td class="small">${t}</td><td>${chip("✓ Connected", "green")}</td><td><button class="btn small" onclick="toast('Reconnect starts in the real app.')">Reconnect</button></td></tr>`).join("")}</tbody></table></div>`;
 }
 
 // ---------- panels and modals ----------
@@ -615,7 +739,7 @@ function panel() {
     body = `<div class="prof">${av(p.name, "xl")}<div><h2>${esc(p.name)}</h2><div class="muted">${esc(p.title)}</div><div class="small">${p.org === "ABC Inc." ? "ABC Inc." : fl(p.org)}</div></div></div>
     <div class="kv"><span>Based in</span><b>${esc(p.city)}</b><span>Local time</span><b>${local}</b><span>Languages</span><b>${p.languages.map(esc).join(", ")}</b></div>
     <div class="lbl">${p.org === "ABC Inc." ? "Specialities" : "From the calls"}</div><div class="row wrap">${p.specialities.map(x => chip(esc(x))).join("")}</div>
-    ${p.hours ? `<div class="lbl">Capacity this week</div><div class="pbar"><span style="width:${Math.round(p.booked / p.hours * 100)}%"></span></div><div class="small muted">${p.booked} of ${p.hours} h booked</div>` : ""}
+    ${p.hours ? `<div class="lbl">Capacity this week</div><div class="pbar"><span style="width:${Math.round(p.booked / p.hours * 100)}%"></span></div><div class="small muted">${p.booked} of ${p.hours} h booked · ${p.hours - p.booked} h free</div>` : ""}
     <div class="lbl">Pilots</div>${pilots.map(x => `<p>${pilotLink(x.id)} <span class="small muted">${esc(STAGES[stageOf(x.id)])}</span></p>`).join("") || `<p class="small muted">None you can see.</p>`}
     ${p.org === "ABC Inc." ? `<button class="btn" onclick="A.slack()">Message in Slack</button>` : ""}`;
   }
@@ -626,15 +750,15 @@ function panel() {
     <div class="transcript">${c.lines.map((l, i) => `<div class="tline ${i === S.panel.i ? "hl" : ""}"><span class="mono small muted">${l.t}</span><div>${PERSON[l.who] ? pl(l.who) : `<b class="small">${esc(l.who)}</b>`}<div>${esc(l.text)}</div></div></div>`).join("")}</div>
     <p class="small muted">Transcript text is treated as data, never as instructions to Pia.</p>`;
   }
-  if (S.panel.kind === "uc") {
-    const pid = S.r[1]; const r = run(pid); const u = r && r.useCases.find(x => x.id === S.panel.id); if (!u) return "";
-    const d = r.dummy[u.id]; const l = lineAt(u.cite);
-    body = `<div class="lbl">Use case</div><h2>${esc(u.title)}</h2><div class="row wrap">${chip(practiceLink(u.practice))}${chip(esc(u.feature))}${draftTag(pid)}</div>
+  if (S.panel.kind === "idea") {
+    const pid = S.r[1]; const r = run(pid); const u = r && r.ideas.find(x => x.id === S.panel.id); if (!u) return "";
+    const l = lineAt(u.cite); const q = r.questions.find(x => x.ideaId === u.id); const pr = r.proposals.find(x => x.ideaId === u.id);
+    body = `<div class="lbl">Idea, in the firm's words</div><h2>“${esc(u.text)}”</h2><div class="row wrap">${chip(esc(u.practice))}${u.status === "kept" ? chip("✓ Use case: " + esc(u.name), "green") : chip(esc(u.status))}</div>
     <div class="lbl">Where it came from</div><blockquote>“${esc(l.text)}”<div class="small muted">${pl(l.who)} · ${CALLS[u.cite.call].source}, ${l.t}</div></blockquote><button class="btn small" onclick="A.call('${u.cite.call}',${u.cite.i})">View in call</button>
-    <div class="lbl">Success criterion</div><p>${u.criterion && u.criterion.text ? esc(u.criterion.text) : `<span class="badc">Not agreed yet</span>`}</p>
-    <div class="lbl">Past pilot</div><p>${u.library ? `${libLink(u.library.id)} · ${esc(u.library.entry.configured)}` : "No match"}</p>
-    <div class="lbl">Dummy data</div><p class="small">${d ? esc(d.brief) : "None"}</p>
-    <div class="lbl">History</div>${S.audit.filter(e => e.pid === pid && e.text.includes(u.title)).map(e => `<p class="small">${e.at} · ${esc(e.actor)}: ${esc(e.text.slice(0, 90))}</p>`).join("") || `<p class="small muted">Drafted by Pia, not edited.</p>`}`;
+    <div class="lbl">How the firm would judge it</div><p>${u.successQuote ? `“${esc(u.successQuote.quote)}” ${srcLink(u.successQuote, "icon")}` : `<span class="muted">Not in the calls</span>`}</p>
+    <div class="lbl">Pia's follow-up</div><p class="small">${u.followUp ? `Found in ${esc(u.followUp.from)}.` : q ? `Not found. Question for the firm: ${esc(q.text)}` : "None needed."}</p>
+    <div class="lbl">Task</div><p class="small">${pr ? `${esc(pr.title)} · ${pr.owner ? "proposed owner " + pl(pr.owner) + " (" + esc(pr.reason) + ")" : esc(pr.flag)}` : "Waits for the firm's answer."}</p>
+    <div class="lbl">History</div>${S.audit.filter(e => e.pid === pid && e.text.includes(u.topic)).map(e => `<p class="small">${e.at} · ${esc(e.actor)}: ${esc(e.text.slice(0, 100))}</p>`).join("") || `<p class="small muted">Not changed yet.</p>`}`;
   }
   return `<div class="scrim light" onclick="A.close()"></div><aside class="panel" role="dialog" aria-modal="true"><button class="icon close" aria-label="Close" onclick="A.close()">✕</button>${body}</aside>`;
 }
@@ -642,23 +766,25 @@ function panel() {
 function modal() {
   if (!S.modal) return "";
   const m = S.modal; let body = "";
-  if (m.kind === "approve") {
-    const pid = S.r[1]; const p = pilot(pid); const r = run(pid); const kept = r.useCases.filter(u => u.status !== "rejected"); const rej = r.useCases.length - kept.length;
-    body = `<h2>Approve the pilot plan</h2><p>${kept.length} use cases${rej ? `, ${rej} rejected` : ""}. ${r.gaps.length} open questions go into the plan for ${pl(p.ae)} to chase.</p>
-      <p class="small">Your edits: <b>${editLevel(r)}</b></p><div class="lbl">What will be written</div><ul class="plain">${approvalWrites(p, r).map(w => `<li>${chip(w.target)} ${esc(w.what)}</li>`).join("")}</ul>
-      <p class="small muted">Nothing goes to the firm. ${esc(p.ae)} sends the invite.</p>
-      <div class="row end"><button class="btn" onclick="A.closeModal()">Cancel</button><button class="btn primary" onclick="A.confirmApprove()">Approve plan</button></div>`;
+  if (m.kind === "ideas") {
+    const pid = S.r[1]; const p = pilot(pid); const r = run(pid); const n = st => r.ideas.filter(u => u.status === st).length;
+    body = `<h2>Confirm the ideas</h2><p>${n("kept")} kept as use cases, ${n("merged")} merged, ${n("dropped")} dropped. ${r.questions.length} questions go into the plan for ${pl(p.ae)} to ask the firm.</p>
+      <ul class="plain">${r.ideas.filter(u => u.status === "kept").map(u => `<li><b>${esc(u.name)}</b> <span class="small muted">${esc(u.practice)}</span></li>`).join("")}</ul>
+      <div class="lbl">What this confirm writes</div><ul class="plain">${confirmWrites("ideas", p, r, { by: me() }).map(w => `<li>${chip(w.target)} ${esc(w.what)}</li>`).join("")}</ul>
+      <p class="small muted">Task owners are confirmed separately by ${esc(ROLES.esm.name)}. Nothing goes to the firm.</p>
+      <div class="row end"><button class="btn" onclick="A.closeModal()">Cancel</button><button class="btn primary" onclick="A.doConfirmIdeas()">Confirm ideas</button></div>`;
   }
-  if (m.kind === "approved") {
-    const pid = S.r[1]; const r = run(pid); const ap = S.approved[pid]; const kept = r.useCases.filter(u => u.status !== "rejected");
-    body = `<h2>✓ Plan approved</h2>${ap.writes.map(w => `<p class="small">${chip("✓ Done", "green")} <b>${w.target}:</b> ${esc(w.what)}</p>`).join("")}
-    <div class="slack"><div class="small muted">#pilot-hv-harrow · PilotHQ</div><p><b>Harrow & Vale pilot plan approved</b> by ${esc(ap.by)}.<br>${kept.length} use cases: ${kept.map(u => esc(u.practice)).join(", ")}.<br>${r.gaps.length} questions to chase with the firm (Sofia).<br>Next: the kickoff checklist is ready in PilotHQ.</p></div>
-    <div class="row end"><button class="btn" onclick="S.modal=null;go('pilots/${pid}/progress')">See progress</button><button class="btn primary" onclick="A.closeModal()">Done</button></div>`;
+  if (m.kind === "ideasDone") {
+    const pid = S.r[1]; const c = conf(pid).ideas;
+    body = `<h2>✓ Plan agreed</h2>${c.writes.map(w => `<p class="small">${chip("✓ Done", "green")} <b>${w.target}:</b> ${esc(w.what)}</p>`).join("")}
+    <div class="slack"><div class="small muted">Slack · PilotHQ</div><p class="small">${esc(slackText(pid))}</p></div>
+    <div class="row end"><button class="btn" onclick="S.modal=null;go('pilots/${pid}/activity')">See it in Activity</button><button class="btn primary" onclick="A.closeModal()">Done</button></div>`;
   }
   if (m.kind === "assign") {
-    const p = pilot(m.pid); const c = capacity(m.pid)[m.w]; const les = PEOPLE.filter(x => x.hours).sort((a, b) => (a.booked - b.booked));
+    const p = pilot(m.pid); const c = capacity(m.pid)[m.w]; const flags = m.w === 0 ? openFlags(m.pid) : [];
     body = `<h2>Assign a Legal Engineer</h2><p>${esc(p.firm)}, week of ${WEEKS[m.w]}: short ${c.need - c.staffed} h for ${esc(c.driver.toLowerCase())}.</p>
-    <div class="card flush">${les.map(x => `<div class="row-i">${pl(x.name, true)}<span class="small muted grow">${esc(x.specialities.join(", "))} · ${x.hours - x.booked} h free</span><button class="btn small primary" onclick="A.confirmAssign('${jq(x.name)}')">Assign</button></div>`).join("")}</div>
+    ${flags.length ? `<div class="banner warn small">${PIA} This also gives them the task Pia couldn't find an owner for: <b>${flags.map(f => esc(f.title)).join(", ")}</b> (${esc(flags[0].flag.replace(/^No one/, "no one"))}).</div>` : ""}
+    <div class="card flush">${lesFree().map(x => `<div class="row-i">${pl(x.name, true)}<span class="small muted grow">${esc(x.specialities.join(", "))} · ${x.free} h free</span><button class="btn small primary" onclick="A.confirmAssign('${jq(x.name)}')">Assign</button></div>`).join("")}</div>
     <div class="row end"><button class="btn" onclick="A.closeModal()">Cancel</button></div>`;
   }
   if (m.kind === "digest") {
@@ -670,7 +796,7 @@ function modal() {
   }
   if (m.kind === "agenda") {
     body = `<h2>${PIA} Kickoff agenda</h2>${chip(PIA + " Drafted by Pia", "pia")}
-    <ol class="small"><li>Introductions and the firm's goals (Priya Raman)</li><li>Use cases and how each will be judged</li><li>Dummy data: what it is and why no client documents</li><li>Training plan: banking associates first, London and Singapore</li><li>Open questions from the calls</li><li>Readout date and the decision by 31 January</li></ol>
+    <ol class="small"><li>Introductions and the firm's goals (Priya Raman)</li><li>The use cases Tom agreed, and who sets each one up</li><li>Training plan: London and Singapore together, New York in its own session</li><li>Open questions for the firm</li><li>Readout date and the decision by 31 January</li></ol>
     <p class="small muted">Edit before you send. Pia doesn't send anything.</p><div class="row end"><button class="btn primary" onclick="A.closeModal()">Done</button></div>`;
   }
   return `<div class="scrim" onclick="if(event.target===this)A.closeModal()"><div class="modal" role="dialog" aria-modal="true">${body}</div></div>`;
@@ -681,45 +807,80 @@ function demoPanel() {
   return `<div class="demo ${S.demoOpen ? "" : "closed"}"><button class="row between dhead" onclick="A.demo()"><b class="small">Simulate events</b><span class="small muted">${S.demoOpen ? "Hide" : "Show"}</span></button>
   ${S.demoOpen ? `<p class="small muted">Trigger what would normally come from Salesforce, Gong or the model. All firms and people are fictional.</p>
     <button class="btn small full" ${hv.stage !== "Proof of value" ? "disabled" : ""} onclick="A.stageChange()">Salesforce: move Harrow & Vale to pilot stage</button>
+    <button class="btn small full" ${hv.stage === "Proof of value" || conf("hv").ideas || (S.anim && S.anim.pid === "hv") ? "disabled" : ""} onclick="A.stageAgain()">Salesforce: same stage change again</button>
     <button class="btn small full" ${S.g2Landed ? "disabled" : ""} onclick="A.landCall()">Gong: follow-up call lands</button>
     <label class="small row"><input type="checkbox" ${S.modelDown ? "checked" : ""} onchange="A.toggleModel()"> Model outage</label>
     <button class="btn small full ghost" onclick="A.reset()">Start again</button>` : ""}</div>`;
 }
 function toasts() { return `<div class="toasts" aria-live="polite">${S.toasts.map(t => `<div class="toast ${t.kind}">${t.kind === "pia" ? PIA + " " : ""}${esc(t.msg)}${t.undo ? ` <a class="undo" onclick="A.undo('${t.id}')">Undo</a>` : ""}</div>`).join("")}</div>`; }
 
-// ---------- acceptance checks (run the real engine on fresh copies) ----------
+// ---------- acceptance checks (run the real engine, and the real confirm actions, on fresh copies) ----------
 const AC_DEFS = [
-  { id: "AC1", given: "A deal reaches pilot stage in Salesforce", when: "The stage changes", then: "Pia starts one run and shows the plan to the assigned Legal Engineer" },
-  { id: "AC2", given: "A new discovery call lands in Gong or Granola", when: "The pilot is not yet approved", then: "Pia re-runs and marks what changed" },
-  { id: "AC3", given: "A drafted use case", when: "The Legal Engineer hovers over it", then: "The source sentence shows, with View in call" },
-  { id: "AC4", given: "A use case with no source sentence", when: "The source check runs", then: "It is removed before anyone sees it" },
-  { id: "AC5", given: "A draft that names the firm, a client, a matter or a fee", when: "The deal-fact screen runs", then: "The draft is blocked and the Legal Engineer is told why" },
-  { id: "AC6", given: "The calls don't cover a practice area or success measure", when: "The agent drafts", then: "It asks a question instead of guessing" },
-  { id: "AC7", given: "A pilot with no recorded calls", when: "A run starts", then: "Pia says there is nothing to read and drafts nothing" },
-  { id: "AC8", given: "The firm has not agreed to AI processing of a call", when: "A run starts", then: "Pia skips that call and says so" },
-  { id: "AC9", given: "A user outside the deal team", when: "They open the pilot", then: "They see nothing" },
-  { id: "AC10", given: "The model is unavailable", when: "A run starts", then: "The run stops cleanly, nothing half-written, retry offered" },
-  { id: "AC11", given: "The Legal Engineer approves", when: "They click Approve plan", then: "Notion page, dummy data and Slack summary are written" },
-  { id: "AC12", given: "Any run", when: "It finishes or fails", then: "Every read, draft, check and approval is logged" }
+  "One run ends waiting for people, with piaVersion on it",
+  "Every idea resolves to a sentence in a consented call",
+  "The invented idea is removed by the source check",
+  "Gap follow-up: one idea gets a quote found in another call; one becomes a question for the Account Executive; the trace shows both searches",
+  "Owner proposal matches speciality and has 4+ free hours; one task has no owner and is flagged",
+  "No time works for the training session; Pia proposes a split; every proposed slot passes the slot check",
+  "A run stops cleanly at the 10-step cap (forced low cap)",
+  "Calls without consent are skipped",
+  "No recorded calls: nothing drafted",
+  "Someone outside the deal team can't open the pilot",
+  "Model down: run stops cleanly, nothing written",
+  "Nothing is written before a person confirms; each confirm writes only its own piece",
+  "Re-run after a new call keeps Tom's edits and marks what changed",
+  "Repeat trigger is skipped with a reason",
+  "Every read, decision, check and confirmation is in the activity log"
 ];
+// Runs fn against a throwaway app state with a fresh Harrow & Vale run, then puts the real state back.
+function sandbox(fn) {
+  const saved = S; S = freshState(); S.role = "le";
+  try {
+    const p = pilot("hv"); p.stage = "Pilot: design";
+    const r = runPia(p, { kind: "stage", now: 0 }); r.version = 1; S.runs.hv = [r];
+    for (const st of r.steps) { const a = stepAudit("hv", st); log("hv", a.actor, a.type, a.text); }
+    return fn(r, p);
+  } finally { S = saved; }
+}
 function runAcceptanceChecks() {
   const hv = clone(PILOTS.find(p => p.id === "hv")), nh = clone(PILOTS.find(p => p.id === "nh")), bw = clone(PILOTS.find(p => p.id === "bw"));
+  hv.stage = "Pilot: design";
   const r1 = runPia(hv);
   const checks = [
-    () => [r1.status === "ready" && r1.steps[0].label === "Start" && r1.steps.at(-1).detail.includes(hv.les[0]), `One run, ${r1.steps.length} steps, waiting for ${hv.les[0]}`],
-    () => { const r2 = mergeRun(clone(r1), runPia(hv, { extraCalls: ["g2"] })); return [r2.useCases.some(u => u.change === "new") && r2.useCases.some(u => u.change === "changed"), r2.changes.join("; ")]; },
-    () => [r1.useCases.length > 0 && r1.useCases.every(u => sourceCheck(u.cite, r1.read).ok && lineAt(u.cite)), `${r1.useCases.length} of ${r1.useCases.length} use cases resolve to a sentence in a call`],
-    () => [r1.removed.some(x => x.id === "uc-spa") && !r1.useCases.some(u => u.id === "uc-spa"), `Removed: ${r1.removed.map(x => x.title + " (" + x.why + ")").join("; ")}`],
-    () => { const d = r1.dummy["uc-chron"]; const clean = dealFactScreen(d.redraft.map(x => x.title + " " + x.body).join(" "), hv).length === 0; return [d.status === "blocked" && d.hits.some(h => h.term === "Meridian Shipping") && clean, `Blocked on "${d.hits.map(h => h.term).join(", ")}"; redraft passes`]; },
-    () => [r1.gaps.some(g => g.id === "gap-uc-dd") && r1.gaps.some(g => g.kind === "Practice with no use case"), `${r1.gaps.length} questions asked`],
-    () => { const r = runPia(nh); return [r.status === "nothing" && r.useCases.length === 0, r.steps.at(-1).detail]; },
-    () => { const r = runPia(bw); return [r.skipped.includes("gb1") && !r.useCases.some(u => u.cite.call === "gb1") && r.steps[1].status === "warn", r.steps[1].detail]; },
+    () => [r1.status === "waiting" && r1.piaVersion === PIA_VERSION && r1.steps.at(-1).kind === "person", `${r1.piaVersion}, ${r1.steps.length} steps, ${r1.toolSteps} of ${r1.maxSteps} tool steps, ends "${r1.steps.at(-1).label}"`],
+    () => [r1.ideas.length > 0 && r1.ideas.every(u => sourceCheck(u.cite, r1.read).ok && CALLS[u.cite.call].consent), `${r1.ideas.length} of ${r1.ideas.length} ideas resolve to a sentence in a consented call`],
+    () => [r1.removed.some(x => x.id === "i-spa") && !r1.ideas.some(u => u.id === "i-spa"), `Removed: ${r1.removed.map(x => x.text + " (" + x.why + ")").join("; ")}`],
+    () => { const lease = r1.ideas.find(u => u.id === "i-lease"); const q = r1.questions.find(x => x.ideaId === "i-emp"); const tr = r1.steps.filter(s => s.kind === "decision" && /Looked in/.test(s.detail));
+      return [lease.followUp && lease.followUp.cite.call !== lease.cite.call && !!q && tr.some(s => /found in/.test(s.detail)) && tr.some(s => /not found, question added/.test(s.detail)), `Lease review: found in ${lease.followUp && lease.followUp.from}. Employment: question for ${hv.ae}. ${tr.length} searches in the trace`]; },
+    () => { const own = r1.proposals.filter(p => p.owner); const fl = r1.proposals.filter(p => !p.owner);
+      const okOwn = own.length > 0 && own.every(p => PERSON[p.owner].specialities.includes(p.practice) && p.freeAt >= MIN_FREE);
+      return [okOwn && fl.length >= 1 && fl.every(f => /No one with .* has time this week/.test(f.flag)) && r1.steps.some(s => s.label === "Propose task owners" && s.detail.includes(ROLES.esm.name)), `${own.map(p => p.owner + " (" + p.reason + ")").join(", ")}; flagged: ${fl.map(f => f.flag).join(", ")}`]; },
+    () => { const sc = r1.schedule; const none = proposeSlots(hv.calendar).length === 0;
+      return [none && sc.fallback === "split" && sc.sessions.length === 2 && sc.sessions.every(s => s.slots.length && slotCheck(s).ok), `Finder found no time; split into ${sc.sessions.map(s => s.label + " (" + s.slots.length + " slots)").join(" and ")}; all pass the slot check`]; },
+    () => { const r = runPia(hv, { maxSteps: 4 }); return [r.status === "stopped" && r.toolSteps === 4 && r.steps.at(-1).label === "Stopped at the step limit" && r.ideas.length > 0, `Cap 4: stopped after ${r.toolSteps} steps, kept ${r.ideas.length} ideas. Full run uses ${r1.toolSteps} of ${MAX_STEPS}`]; },
+    () => { const r = runPia(bw); return [r.skipped.includes("gb1") && !r.ideas.some(u => u.cite.call === "gb1") && r.steps[1].status === "warn", r.steps[1].detail]; },
+    () => { const r = runPia(nh); return [r.status === "nothing" && r.ideas.length === 0 && r.toolSteps === 0, r.steps.at(-1).detail]; },
     () => [!canView("out", hv) && canView("le", hv) && canView("esm", hv) && !canView("aie", hv), "Lars Berg (not on the deal) is refused; Tom Achebe can open it"],
-    () => { const r = runPia(hv, { modelDown: true }); return [r.status === "failed" && r.useCases.length === 0 && !r.steps.some(s => s.label.startsWith("Draft")) && /retry/i.test(r.steps.at(-1).detail), "Stopped at planning; no drafts, no writes, retry offered"]; },
-    () => { const w = approvalWrites(hv, r1); return [w.some(x => x.target === "Notion") && w.some(x => x.target === "Slack") && !("writes" in r1), w.map(x => x.target).join(", ") + "; nothing written before approval"]; },
-    () => { const ev = r1.steps.map(st => stepAudit("hv", st)); const types = new Set(ev.map(e => e.type)); return [ev.length === r1.steps.length && ["read", "draft", "check", "approval"].every(t => types.has(t)), `${ev.length} log entries for ${r1.steps.length} steps: ${[...types].join(", ")}`]; }
+    () => { const r = runPia(hv, { modelDown: true }); return [r.status === "failed" && r.ideas.length === 0 && r.proposals.length === 0 && /retry/i.test(r.steps.at(-1).detail), "Stopped before reading; no ideas, no proposals, nothing written, retry offered"]; },
+    () => sandbox(r => {
+      const before = S.writes.length; const readOnly = Object.values(TOOLS).every(t => t.readOnly);
+      r.ideas.forEach(u => { u.status = "kept"; u.name = u.text; }); confirmIdeasCore("hv");
+      const afterIdeas = S.writes.slice(before); const tasksAfterIdeas = S.extraTasks.length;
+      confirmOwnersCore("hv"); const afterOwners = S.writes.slice(before + afterIdeas.length);
+      const ok = readOnly && before === 0 && afterIdeas.length && afterIdeas.every(w => w.piece === "ideas") && tasksAfterIdeas === 0 && afterOwners.length && afterOwners.every(w => w.piece === "owners") && S.extraTasks.length > 0;
+      return [ok, `0 writes before any confirm; Tom's confirm wrote ${afterIdeas.map(w => w.target).join(" and ")}; Dana's wrote ${S.extraTasks.length} tasks only. All ${Object.keys(TOOLS).length} tools read-only`];
+    }),
+    () => { const prev = clone(r1); const l = prev.ideas.find(u => u.id === "i-lease"); l.text = "Lease review: break clauses only"; l.edited = true; l.status = "kept"; l.name = "Break clause review";
+      const r2 = mergeRun(prev, runPia(hv, { extraCalls: ["g2"] })); const l2 = r2.ideas.find(u => u.id === "i-lease");
+      return [l2.text === l.text && l2.name === "Break clause review" && r2.changes.length > 0 && r2.ideas.some(u => u.change === "found"), `Tom's edit kept; changes: ${r2.changes.join("; ")}`]; },
+    () => { const r = runPia(hv, { kind: "stage", now: 300, history: [{ kind: "stage", stage: hv.stage, at: 0, status: "waiting", version: 1 }] }); return [r.status === "skipped" && !!r.reason && r.toolSteps === 0, `Skipped: ${r.reason}`]; },
+    () => sandbox(r => {
+      r.ideas.forEach(u => { u.status = "kept"; u.name = u.text; }); confirmIdeasCore("hv"); confirmOwnersCore("hv");
+      const types = new Set(S.audit.map(e => e.type)); const need = ["read", "decision", "check", "confirm"];
+      return [need.every(t => types.has(t)) && S.audit.filter(e => e.type !== "confirm" && e.type !== "write" && e.actor !== "Slack").length === r.steps.length, `${S.audit.length} log entries: ${need.map(t => t + " " + S.audit.filter(e => e.type === t).length).join(", ")}`];
+    })
   ];
-  return checks.map(fn => { try { const [pass, evidence] = fn(); return { pass, evidence }; } catch (e) { return { pass: false, evidence: "Error: " + e.message }; } });
+  return checks.map(fn => { try { const [pass, evidence] = fn(); return { pass: !!pass, evidence }; } catch (e) { return { pass: false, evidence: "Error: " + e.message }; } });
 }
 
 S = freshState(); seed(); route();

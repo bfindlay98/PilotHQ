@@ -222,6 +222,20 @@ blockquote{margin:6px 0;padding:10px 14px;border-left:3px solid var(--pia);backg
 .undo{margin-left:8px;text-decoration:underline;font-weight:600}
 details summary{cursor:pointer}
 
+/* v3: ideas, questions, decisions, learning */
+.st.ok.k-decision .dot{background:var(--pia);color:#fff}
+.ideas tr.dropped td{opacity:.5} .ideas tr.merged td{opacity:.75} .ideas tr.kept td:first-child{box-shadow:inset 3px 0 var(--accent)}
+.ideas select{font-size:12.5px;padding:3px 6px}
+input.ans{width:100%;min-width:160px;padding:6px 9px;border:1px solid var(--line);border-radius:var(--r);background:var(--sunk);margin-top:6px}
+.qrow{padding:8px 0;border-bottom:1px solid var(--line)} .qrow:last-child{border:0}
+.later .btn{margin:0 6px 6px 0}
+.chart{width:100%;height:auto;display:block;margin:6px 0 10px}
+.chart .gl{stroke:var(--line);stroke-width:1} .chart .ax{fill:var(--muted);font-size:11px} .chart .dl{fill:var(--ink2);font-size:11.5px;font-weight:500}
+.work{grid-template-columns:minmax(0,1fr)} .tabbody,.piapanel,.grid2>*,.ov>*{min-width:0}
+.tscroll{overflow-x:auto}
+@media (max-width:860px){.tabbody>.row.between{flex-wrap:wrap}}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:4px} .legend i{display:inline-block;width:12px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle}
+
 @media (max-width:1100px){.work.with-pia{grid-template-columns:1fr}.piapanel{position:static;max-height:none}.stepper{grid-template-columns:repeat(4,1fr)}.stepper li::before{display:none}}
 @media (max-width:860px){
   .icon.menu{display:inline-grid}
